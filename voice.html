@@ -151,7 +151,7 @@
     .mem.me { color: #04130d; background: linear-gradient(145deg, var(--primary), var(--primary-deep)); border-color: transparent; }
     .mem.talk { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.22), 0 0 18px var(--glow); color: var(--primary); }
     .mem.me.talk { color: #04130d; }
-    .mem.cut { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); text-decoration: line-through; box-shadow: none; }
+    .mem.cut { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); box-shadow: none; }
     .legend { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--sub); margin: 16px 0 0; }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .legend b { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -222,7 +222,7 @@
     /* ---------- 번호 사용 표시 ---------- */
     .chip { position: relative; }
     .chip.used {
-      opacity: .45; border-style: dashed; text-decoration: line-through;
+      opacity: .45; border-style: dashed;
       color: var(--danger); background: rgba(248, 113, 113, 0.08);
     }
     .chip.used::after {
@@ -286,6 +286,16 @@
     .qrbox { width: 240px; height: 240px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 10px; display: flex; align-items: center; justify-content: center; }
     .qrbox svg { width: 100%; height: 100%; }
     .closebtn { margin-top: 18px; }
+
+    /* ---------- 번호 원 안에 번호 + 이름 표시 ---------- */
+    .chip, .mem { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; line-height: 1.1; overflow: hidden; }
+    .mem { width: 100%; height: auto; aspect-ratio: 1; }
+    .chip .n, .mem .n { font-size: 18px; font-weight: 700; }
+    .chip .t, .mem .t { display: none; max-width: 90%; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; }
+    .chip.hasname .n, .mem.hasname .n { font-size: 10px; font-weight: 600; opacity: .75; }
+    .chip.hasname .t, .mem.hasname .t { display: block; }
+    .chip.used .n, .mem.cut .n { text-decoration: line-through; }
+    .members { gap: 10px 8px; }
   </style>
 </head>
 <body>
@@ -311,7 +321,7 @@
     <p class="label">방 코드 · 숫자 5자리</p>
     <input type="text" id="roomCode" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="00000" value="12345">
     <div class="gap"></div>
-    <p class="label">내 이름 · 번호 아래에 다른 사람에게 보입니다 (선택)</p>
+    <p class="label">내 이름 · 번호 원 안에 다른 사람에게 보입니다 (선택)</p>
     <input type="text" class="field" id="userName" maxlength="6" autocomplete="off" placeholder="예: 김철수">
     <div class="gap"></div>
     <p class="label">내 번호 · 사람마다 다른 번호를 고르세요</p>
@@ -2694,7 +2704,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-c";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
+  const APP_VERSION = "2026.11.17-d";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
   const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
@@ -2752,28 +2762,29 @@ var qrcode = function() {
     const chips = $("numChips");
     for (let i = 1; i <= MAX_USERS; i++) {
       const b = document.createElement("button");
-      b.className = "chip"; b.textContent = i;
+      b.className = "chip"; b.innerHTML = '<span class="n">' + i + '</span><span class="t" id="cn' + i + '"></span>';
       b.onclick = () => {
         if (usedNums[i]) { joinMsg(i + "번은 이미 사용 중입니다. 다른 번호를 골라 주세요.", true); return; }
         joinMsg(""); myNum = i; savePref("num", i); drawChips();
       };
-      const cell = document.createElement("div"); cell.className = "cell";
-      const nm = document.createElement("span"); nm.className = "nm"; nm.id = "cn" + i;
-      cell.appendChild(b); cell.appendChild(nm); chips.appendChild(cell);
+      chips.appendChild(b);
     }
     drawChips();
 
     const mem = $("members");
     for (let i = 1; i <= MAX_USERS; i++) {
       const b = document.createElement("button");
-      b.className = "mem"; b.id = "mem" + i; b.textContent = i;
+      b.className = "mem"; b.id = "mem" + i; b.innerHTML = '<span class="n">' + i + '</span><span class="t" id="nm' + i + '"></span>';
       b.onclick = () => togglePersonMute(i);
-      const cell = document.createElement("div"); cell.className = "cell";
-      const nm = document.createElement("span"); nm.className = "nm"; nm.id = "nm" + i;
-      cell.appendChild(b); cell.appendChild(nm); mem.appendChild(cell);
+      mem.appendChild(b);
     }
   })();
 
+  function setName(el, t) {
+    el.textContent = t;
+    const n = [...t].length;
+    el.style.fontSize = n <= 3 ? "14px" : n === 4 ? "12px" : n === 5 ? "11px" : "10px";
+  }
   function drawChips() {
     const typed = $("userName").value.trim();
     [...$("numChips").querySelectorAll(".chip")].forEach((b, idx) => {
@@ -2781,7 +2792,9 @@ var qrcode = function() {
       b.classList.toggle("sel", n === myNum && !usedNums[n]);
       b.classList.toggle("used", !!usedNums[n]);
       b.title = usedNums[n] ? "사용 중" : "";
-      $("cn" + n).textContent = usedNums[n] ? (usedNames[n] || "") : (n === myNum ? (typed || "나") : "");
+      const label = usedNums[n] ? (usedNames[n] || "") : (n === myNum ? (typed || "나") : "");
+      setName($("cn" + n), label);
+      b.classList.toggle("hasname", !!label);
     });
   }
   $("roomCode").addEventListener("input", (e) => {
@@ -3414,7 +3427,9 @@ var qrcode = function() {
       const isMe = i === myNum, isLive = live.includes(i), isTalk = isMe ? meSpeaking : talkers.includes(i);
       const cut = !isMe && !!mutedNums[i];
       $("mem" + i).className = "mem" + (isMe ? " me" : "") + (isLive ? " live" : "") + (isTalk && !cut ? " talk" : "") + (cut ? " cut" : "");
-      $("nm" + i).textContent = isMe ? (myName || "나") : (isLive ? (names[i] || "") : "");
+      const label = isMe ? (myName || "나") : (isLive ? (names[i] || "") : "");
+      setName($("nm" + i), label);
+      $("mem" + i).classList.toggle("hasname", !!label);
     }
 
     // 아래 버튼 3개

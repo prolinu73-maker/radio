@@ -2717,7 +2717,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-e";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
+  const APP_VERSION = "2026.11.17-f";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
   const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
@@ -3649,6 +3649,7 @@ var qrcode = function() {
 
   /* ================= 시작할 때 ================= */
   if (!isStandalone()) $("installCard").style.display = "flex";
+  if (new URLSearchParams(location.search).get("install") === "1" && isIOS && !isStandalone()) setTimeout(showGuide, 700);   // 설치 안내 페이지에서 넘어온 아이폰
   if (isInApp) $("inappCard").style.display = "flex";
   if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
   document.querySelectorAll(".ver").forEach((e) => { e.textContent = "버전 " + APP_VERSION; });

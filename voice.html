@@ -272,8 +272,8 @@
     <div class="opt-row">
       <span>말하는 방식</span>
       <div class="seg">
+        <button id="modeOpen">켜고 끄기</button>
         <button id="modePtt">누르고 말하기</button>
-        <button id="modeOpen">자유 대화</button>
       </div>
     </div>
     <div class="opt-row"><span>수신할 때 진동</span><button class="sw" id="vibSw" aria-label="진동"></button></div>
@@ -296,6 +296,7 @@
   /* ================= 설정값 ================= */
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
+  const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
   const MAX_BITRATE = 24000;      // 한 사람에게 보내는 음성 품질(bps). 낮출수록 데이터·배터리 절약
   const VOICE_TH = 0.025;         // 이 값보다 소리가 크면 "말하는 중"으로 판단 (주변이 시끄러우면 0.04 정도로 올리세요)
   const HOLD_MS = 600;            // 말이 끊긴 뒤 표시를 유지하는 시간
@@ -321,7 +322,7 @@
   let lostAt = {};         // 번호 -> 끊긴 시각 (자동 재연결용)
   let mutedNums = {};      // 번호 -> 개별 음소거 여부
   let joined = false, code = "", myNum = 1;
-  let micOn = true, pttMode = true, pttHeld = false;
+  let micOn = START_MIC_ON, pttMode = false, pttHeld = false;
   let listenMuted = false, vibrateOn = true, beepOn = false;
   let standbyMode = false, lastRx = 0, rxActive = false, meSpeaking = false, lastMeVoice = 0;
   let levelTimer = null, healTimer = null, wakeLock = null, lastSig = "", tick = 0;
@@ -337,7 +338,7 @@
     $("roomCode").value = saved;
     myNum = parseInt(loadPref("num", "1"), 10) || 1;
     if (myNum < 1 || myNum > MAX_USERS) myNum = 1;
-    pttMode = loadPref("ptt20", "1") === "1";   // 20명용은 '누르고 말하기'가 기본
+    pttMode = loadPref("ptt21", "0") === "1";   // 기본: 한 번 눌러 켜고, 다시 눌러 끄는 방식
     vibrateOn = loadPref("vib", "1") === "1";
     beepOn = loadPref("beep", "0") === "1";
 
@@ -414,7 +415,7 @@
       localSource.connect(localAnalyser);
     }
 
-    micOn = true; pttHeld = false; listenMuted = false; mutedNums = {}; lostAt = {};
+    micOn = START_MIC_ON; pttHeld = false; listenMuted = false; mutedNums = {}; lostAt = {};
     applyMic();
     joinMsg("서버에 접속 중...");
 
@@ -656,8 +657,8 @@
   micBtn.addEventListener("pointercancel", pttUp);
   micBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  $("modeOpen").onclick = () => { pttMode = false; micOn = true; pttHeld = false; savePref("ptt20", "0"); applyMic(); render(true); };
-  $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt20", "1"); applyMic(); render(true); };
+  $("modeOpen").onclick = () => { pttMode = false; micOn = true; pttHeld = false; savePref("ptt21", "0"); applyMic(); render(true); };
+  $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt21", "1"); applyMic(); render(true); };
 
   // 전체 수신 음소거
   $("listenBtn").onclick = () => { listenMuted = !listenMuted; applyListen(); render(true); };
@@ -753,7 +754,7 @@
     micBtn.innerHTML = svg(on || pttMode ? IC.mic : IC.micOff, 46);
     const ml = $("micLabel");
     ml.className = on ? "live" : (offState ? "off" : "");
-    ml.textContent = pttMode ? (on ? "말하는 중..." : "누르고 말하기") : (on ? "마이크 켜짐" : "마이크 꺼짐");
+    ml.textContent = pttMode ? (on ? "말하는 중..." : "누르고 말하기") : (on ? "마이크 켜짐 · 눌러서 끄기" : "마이크 꺼짐 · 눌러서 켜기");
 
     const sb = $("standbyBtn");
     sb.className = "side" + (standbyMode ? " active" : "");

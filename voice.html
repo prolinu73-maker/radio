@@ -2738,7 +2738,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-h";
+  const APP_VERSION = "2026.11.17-i";
   const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
@@ -3111,6 +3111,8 @@ var qrcode = function() {
       delete lostAt[num];
       if (call.peerConnection) limitBitrate(call.peerConnection);
       sendHello(num);
+      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} } }, 2500);
+      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} } }, 8000);
       applyRouting();
 
       const audioEl = document.createElement("audio");
@@ -3304,6 +3306,10 @@ var qrcode = function() {
   }
   function handleSignal(n, d) {
     if (!joined || !d || typeof d !== "object") return;
+    if (d.t === "hello") {   // 상대가 데이터 연결로 알려 준 이름
+      if (n >= 1 && n <= MAX_USERS && n !== myNum && d.name !== undefined) { names[n] = String(d.name).slice(0, 6); render(true); }
+      return;
+    }
     if (d.t === "roger" && n >= 1 && n <= MAX_USERS && n !== myNum) {
       if (!rogerOn || listenMuted || mutedNums[n]) return;
       const now = Date.now();
@@ -3400,6 +3406,8 @@ var qrcode = function() {
       const entry = calls[idOf(num)];
       const dc = peer.connect(idOf(num), { reliable: true, metadata: { name: myName, num: myNum } });
       dc.on("error", () => {});
+      dc.on("data", (d) => handleSignal(num, d));
+      dc.on("open", () => { try { dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} });
       if (entry) {   // 이 연결을 유지해 두고 신호음을 보낼 때 씁니다
         entry.dc = dc;
         dc.on("close", () => { if (entry.dc === dc) entry.dc = null; });

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#070b14">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>현장 무전기</title>
   <!-- 무료 P2P 통신 라이브러리 (가입 불필요) -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -209,9 +211,41 @@
     #standby .clock { font-size: 58px; font-weight: 200; color: #52525b; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
     #standby p { margin: 0; font-size: 14px; line-height: 1.6; }
     #audio-container { display: none; }
+
+    /* ---------- 번호 사용 표시 ---------- */
+    .chip { position: relative; }
+    .chip.used {
+      opacity: .45; border-style: dashed; text-decoration: line-through;
+      color: var(--danger); background: rgba(248, 113, 113, 0.08);
+    }
+    .chip.used::after {
+      content: ""; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px;
+      border-radius: 50%; background: var(--danger); box-shadow: 0 0 6px var(--danger);
+    }
+    .chipnote { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--sub); line-height: 1.5; }
+    .chipnote button { flex: none; border: 1px solid var(--line); background: none; border-radius: 10px; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--sub); }
+    .mem { position: relative; }
+    .mem.live:not(.me)::after {
+      content: ""; position: absolute; top: 0; right: 0; width: 11px; height: 11px;
+      border-radius: 50%; background: var(--primary); border: 2px solid var(--bg);
+    }
+
+    /* ---------- 버전 / 업데이트 / 화면 유지 ---------- */
+    .ver { text-align: center; font-size: 11px; color: #4b566b; margin: 4px 0 0; }
+    .updbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 60; display: none;
+      align-items: center; justify-content: center; gap: 12px;
+      padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+      background: #f59e0b; color: #1a1100; font-size: 14px; font-weight: 700;
+    }
+    .updbar button { border: none; border-radius: 10px; padding: 7px 14px; font-size: 14px; font-weight: 800; background: #1a1100; color: #fff; }
+    .wakest { font-size: 13px; font-weight: 600; color: var(--warn); text-align: right; }
+    .wakest.ok { color: var(--primary); }
   </style>
 </head>
 <body>
+
+<div class="updbar" id="updBar"><span>새 버전이 있습니다</span><button id="updBtn" type="button">업데이트</button></div>
 
 <!-- ================= 접속 화면 ================= -->
 <div class="screen on" id="joinScreen">
@@ -229,11 +263,13 @@
     <div class="gap"></div>
     <p class="label">내 번호 · 사람마다 다른 번호를 고르세요</p>
     <div class="chips" id="numChips"></div>
+    <div class="chipnote"><span id="scanText">방 코드를 입력하면 사용 중인 번호를 확인합니다</span><button id="rescanBtn" type="button">다시 확인</button></div>
   </div>
 
   <button class="btn btn-primary" id="joinBtn">통신 시작</button>
   <button class="btn btn-ghost" id="inviteBtn">초대 링크 보내기</button>
   <p class="msg" id="joinMsg"></p>
+  <p class="ver"></p>
 </div>
 
 <!-- ================= 통신 화면 ================= -->
@@ -278,9 +314,11 @@
     </div>
     <div class="opt-row"><span>수신할 때 진동</span><button class="sw" id="vibSw" aria-label="진동"></button></div>
     <div class="opt-row"><span>수신할 때 알림음</span><button class="sw" id="beepSw" aria-label="알림음"></button></div>
+    <div class="opt-row"><span>화면 자동 꺼짐 방지</span><span class="wakest" id="wakeSt">확인 중</span></div>
   </div>
 
   <button class="btn btn-leave" id="leaveBtn">통신 종료</button>
+  <p class="ver"></p>
 </div>
 
 <!-- 대기 화면: 누군가 말하면 자동으로 걷힙니다 -->
@@ -294,6 +332,7 @@
 
 <script>
   /* ================= 설정값 ================= */
+  const APP_VERSION = "2026.11.17-a";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
   const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
@@ -326,6 +365,9 @@
   let listenMuted = false, vibrateOn = true, beepOn = false;
   let standbyMode = false, lastRx = 0, rxActive = false, meSpeaking = false, lastMeVoice = 0;
   let levelTimer = null, healTimer = null, wakeLock = null, lastSig = "", tick = 0;
+  let wakeVideo = null, wakeDraw = null;
+  let scanPeer = null, scanTimer = null, scanBusy = false, scanToken = 0, usedNums = {};
+  let lastUpdCheck = 0, remoteVer = null;
   const buf = new Uint8Array(512);
 
   /* ================= 저장된 설정 불러오기 ================= */
@@ -346,7 +388,10 @@
     for (let i = 1; i <= MAX_USERS; i++) {
       const b = document.createElement("button");
       b.className = "chip"; b.textContent = i;
-      b.onclick = () => { myNum = i; savePref("num", i); drawChips(); };
+      b.onclick = () => {
+        if (usedNums[i]) { joinMsg(i + "번은 이미 사용 중입니다. 다른 번호를 골라 주세요.", true); return; }
+        joinMsg(""); myNum = i; savePref("num", i); drawChips();
+      };
       chips.appendChild(b);
     }
     drawChips();
@@ -361,9 +406,89 @@
   })();
 
   function drawChips() {
-    [...$("numChips").children].forEach((b, idx) => b.classList.toggle("sel", idx + 1 === myNum));
+    [...$("numChips").children].forEach((b, idx) => {
+      const n = idx + 1;
+      b.classList.toggle("sel", n === myNum && !usedNums[n]);
+      b.classList.toggle("used", !!usedNums[n]);
+      b.title = usedNums[n] ? "사용 중" : "";
+    });
   }
-  $("roomCode").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5); });
+  $("roomCode").addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5);
+    stopScan(); usedNums = {}; drawChips();
+    if (/^\d{5}$/.test(e.target.value)) scheduleScan(600);
+    else setScanText("방 코드를 입력하면 사용 중인 번호를 확인합니다");
+  });
+  $("rescanBtn").onclick = () => { stopScan(); scheduleScan(0); };
+
+  /* ================= 사용 중인 번호 확인 ================= */
+  // 방 코드를 넣으면 1~20번에 잠깐 신호를 보내 보고, 응답이 오는 번호를 "사용 중"으로 표시합니다
+  function setScanText(t) { $("scanText").textContent = t; }
+  function stopScan() {
+    scanToken++; clearTimeout(scanTimer); scanBusy = false;
+    if (scanPeer) { try { scanPeer.destroy(); } catch (e) {} scanPeer = null; }
+  }
+  function scheduleScan(delay) { clearTimeout(scanTimer); scanTimer = setTimeout(runScan, delay); }
+
+  function runScan() {
+    if (joined || typeof Peer === "undefined" || scanBusy) return;
+    const c = $("roomCode").value;
+    if (!/^\d{5}$/.test(c)) return;
+    scanBusy = true;
+    const token = ++scanToken;
+    setScanText("사용 중인 번호 확인 중...");
+    const found = {}, done = {};
+    let p;
+    try { p = new Peer(); } catch (e) { scanBusy = false; return; }
+    scanPeer = p;
+
+    const finish = (failed) => {
+      if (token !== scanToken) return;
+      scanBusy = false;
+      try { p.destroy(); } catch (e) {}
+      if (scanPeer === p) scanPeer = null;
+      if (failed) { setScanText("사용 중인 번호를 확인하지 못했습니다"); scheduleScan(20000); return; }
+      usedNums = found;
+      const used = Object.keys(found).map(Number).sort((a, b) => a - b);
+      if (usedNums[myNum]) {
+        let free = 0;
+        for (let i = 1; i <= MAX_USERS; i++) if (!usedNums[i]) { free = i; break; }
+        if (free) { const old = myNum; myNum = free; savePref("num", free); joinMsg(old + "번은 사용 중이라 " + free + "번으로 바꿨습니다."); }
+        else joinMsg("모든 번호가 사용 중입니다.", true);
+      }
+      drawChips();
+      setScanText(used.length ? "사용 중 " + used.length + "명: " + used.join(", ") + "번 (빨간 점)" : "사용 중인 번호가 없습니다");
+      if (!joined) scheduleScan(15000);
+    };
+
+    p.on("error", (err) => {
+      if (token !== scanToken) return;
+      if (err.type === "peer-unavailable") {
+        const m = new RegExp(APP_PREFIX + c + "-(\\d+)").exec(err.message || "");
+        if (m) done[parseInt(m[1], 10)] = true;   // 응답 없음 = 비어 있는 번호
+        return;
+      }
+      finish(true);
+    });
+
+    p.on("open", () => {
+      for (let i = 1; i <= MAX_USERS; i++) {
+        setTimeout(() => {
+          if (token !== scanToken || p.destroyed) return;
+          try {
+            const conn = p.connect(APP_PREFIX + c + "-" + i, { reliable: false });
+            conn.on("open", () => { found[i] = true; done[i] = true; try { conn.close(); } catch (e) {} });
+            conn.on("error", () => { done[i] = true; });
+          } catch (e) { done[i] = true; }
+        }, 120 * (i - 1));
+      }
+      const t0 = Date.now();
+      const iv = setInterval(() => {
+        if (token !== scanToken) { clearInterval(iv); return; }
+        if (Object.keys(done).length >= MAX_USERS || Date.now() - t0 > 9000) { clearInterval(iv); finish(false); }
+      }, 250);
+    });
+  }
 
   function joinMsg(text, isErr) { $("joinMsg").textContent = text || ""; $("joinMsg").classList.toggle("err", !!isErr); }
 
@@ -390,6 +515,8 @@
       joinMsg("이 주소에서는 마이크를 쓸 수 없습니다. https 주소로 접속해 주세요.", true); return;
     }
     savePref("code", code);
+    stopScan();
+    acquireWake();   // 화면 꺼짐 방지는 버튼을 누른 직후에 요청해야 잘 됩니다
     $("joinBtn").disabled = true;
     joinMsg("마이크 권한 확인 중...");
 
@@ -445,6 +572,8 @@
     });
 
     peer.on("call", onIncoming);
+    // 접속 화면에서 "사용 중인 번호"를 확인하려는 신호가 오면 잠깐 응답하고 닫습니다
+    peer.on("connection", (c) => { c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 300)); });
 
     peer.on("disconnected", () => {
       setConn(false);
@@ -577,6 +706,7 @@
   // 끊긴 상대에게 2분 동안 5초마다 다시 연결 시도 (번호가 작은 쪽이 겁니다)
   function healLoop() {
     if (!joined) return;
+    acquireWake();   // 화면 꺼짐 방지가 풀렸으면 다시 걸어 둡니다
     const now = Date.now();
     for (let i = myNum + 1; i <= MAX_USERS; i++) {
       if (lostAt[i] && now - lostAt[i] < RETRY_WINDOW_MS && !calls[idOf(i)]) placeCall(i);
@@ -692,16 +822,83 @@
     $("sbClock").textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
   }
 
+  function wakeStatus(t, ok) { const el = $("wakeSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }
+
   async function acquireWake() {
-    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+    if (document.hidden) return;
+    if (wakeLock && !wakeLock.released) { wakeStatus("작동 중", true); return; }
+    if (wakeVideo && !wakeVideo.paused) return;
+    if ("wakeLock" in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => wakeStatus("다시 설정 중...", false));
+        wakeStatus("작동 중", true);
+        return;
+      } catch (e) { /* 절전 모드 등으로 거부되면 아래 대체 방식을 시도합니다 */ }
+    }
+    startWakeVideo();
   }
+
+  // 대체 방식: 보이지 않는 작은 영상을 계속 재생해서 화면이 꺼지지 않게 합니다
+  function startWakeVideo() {
+    try {
+      if (!wakeVideo) {
+        const c = document.createElement("canvas"); c.width = 16; c.height = 16;
+        if (!c.captureStream) { wakeStatus("이 기기는 지원 안 됨", false); return; }
+        const ctx = c.getContext("2d");
+        const v = document.createElement("video");
+        v.setAttribute("playsinline", ""); v.muted = true; v.loop = true;
+        v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none";
+        v.srcObject = c.captureStream(2);
+        document.body.appendChild(v);
+        wakeVideo = v;
+        wakeDraw = setInterval(() => { ctx.fillStyle = ((Date.now() / 500) | 0) % 2 ? "#000" : "#020202"; ctx.fillRect(0, 0, 16, 16); }, 500);
+      }
+      const pr = wakeVideo.play();
+      if (pr && pr.then) pr.then(() => wakeStatus("작동 중 (대체 방식)", true)).catch(() => wakeStatus("화면을 한 번 터치해 주세요", false));
+    } catch (e) { wakeStatus("이 기기는 지원 안 됨", false); }
+  }
+
+  function stopWake() {
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    if (wakeDraw) { clearInterval(wakeDraw); wakeDraw = null; }
+    if (wakeVideo) { try { wakeVideo.pause(); wakeVideo.srcObject = null; wakeVideo.remove(); } catch (e) {} wakeVideo = null; }
+    wakeStatus("확인 중", false);
+  }
+  // 화면을 터치할 때 아직 안 걸려 있으면 다시 시도 (일부 기기는 터치가 있어야 허용)
+  document.addEventListener("pointerdown", () => { if (joined) acquireWake(); });
+
+  /* ================= 새 버전 확인 ================= */
+  async function checkUpdate() {
+    if (!/^https?:/.test(location.protocol)) return;
+    if (Date.now() - lastUpdCheck < 60000) return;
+    lastUpdCheck = Date.now();
+    try {
+      const r = await fetch(location.pathname + "?nocache=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) return;
+      const t = await r.text();
+      const m = new RegExp('APP_VERSION = "([0-9a-z.-]+)"').exec(t);
+      if (!m || m[1] === APP_VERSION) return;
+      remoteVer = m[1];
+      let tried = false;
+      try { tried = !!sessionStorage.getItem("upd_" + remoteVer); } catch (e) {}
+      if (!joined && !tried) { try { sessionStorage.setItem("upd_" + remoteVer, "1"); } catch (e) {} applyUpdate(); return; }
+      $("updBar").style.display = "flex";
+    } catch (e) {}
+  }
+  function applyUpdate() {
+    const c = $("roomCode").value;
+    location.replace(location.pathname + "?" + (/^\d{5}$/.test(c) ? "code=" + c + "&" : "") + "v=" + (remoteVer || Date.now()));
+  }
+  $("updBtn").onclick = applyUpdate;
   document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkUpdate();
     if (!document.hidden && joined) {
       acquireWake();
       if (audioCtx && audioCtx.state !== "running") audioCtx.resume();
     }
   });
-  window.addEventListener("pagehide", () => { if (peer) { try { peer.destroy(); } catch (e) {} } });
+  window.addEventListener("pagehide", () => { stopScan(); if (peer) { try { peer.destroy(); } catch (e) {} } });
 
   /* ================= 화면 그리기 ================= */
   function render(force) {
@@ -776,7 +973,7 @@
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
     localAnalyser = null; localSource = null;
-    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    stopWake();
     standbyMode = false; rxActive = false; meSpeaking = false; lastRx = 0; lastSig = "";
     $("standby").classList.remove("on");
     $("audio-container").innerHTML = "";
@@ -784,7 +981,14 @@
     $("joinScreen").classList.add("on");
     $("joinBtn").disabled = false;
     joinMsg(message || "", isErr);
+    usedNums = {}; drawChips();
+    if (/^\d{5}$/.test($("roomCode").value)) scheduleScan(1500);
   }
+
+  /* ================= 시작할 때 ================= */
+  document.querySelectorAll(".ver").forEach((e) => { e.textContent = "버전 " + APP_VERSION; });
+  if (/^\d{5}$/.test($("roomCode").value)) scheduleScan(800);
+  setTimeout(checkUpdate, 1500);
 </script>
 </body>
 </html>

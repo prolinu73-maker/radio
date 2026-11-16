@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#070b14">
+  <title>현장 무전기</title>
+  <!-- 무료 P2P 통신 라이브러리 (가입 불필요) -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card: rgba(255, 255, 255, 0.045);
+      --line: rgba(255, 255, 255, 0.09);
+      --text: #e8eef7;
+      --sub: #8794ab;
+      --primary: #34d399;
+      --primary-deep: #059669;
+      --glow: rgba(52, 211, 153, 0.35);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.12);
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color: var(--text);
+      min-height: 100dvh;
+      background:
+        radial-gradient(90% 45% at 50% -10%, rgba(16, 185, 129, 0.22), transparent 70%),
+        radial-gradient(60% 30% at 100% 100%, rgba(56, 189, 248, 0.08), transparent 70%),
+        var(--bg);
+      background-attachment: fixed;
+      display: flex;
+      justify-content: center;
+      padding: calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom));
+    }
+    button { font-family: inherit; color: inherit; cursor: pointer; }
+    .screen { width: 100%; max-width: 420px; display: none; flex-direction: column; gap: 14px; }
+    .screen.on { display: flex; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .label { font-size: 13px; font-weight: 600; color: var(--sub); margin: 0 0 10px; letter-spacing: .2px; }
+
+    /* ---------- 접속 화면 ---------- */
+    .brand { text-align: center; padding: 30px 0 12px; }
+    .brand .logo {
+      width: 76px; height: 76px; border-radius: 26px; margin: 0 auto 18px;
+      background: linear-gradient(145deg, var(--primary), var(--primary-deep));
+      color: #04130d;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 12px 40px var(--glow), inset 0 1px 0 rgba(255,255,255,.35);
+    }
+    .brand h1 { font-size: 27px; margin: 0 0 8px; letter-spacing: -0.8px; font-weight: 800; }
+    .brand p { font-size: 14px; color: var(--sub); margin: 0; }
+    #roomCode {
+      width: 100%; padding: 15px; font-size: 28px; font-weight: 700;
+      text-align: center; letter-spacing: 12px; text-indent: 12px;
+      border: 1.5px solid var(--line); border-radius: 16px;
+      background: rgba(0, 0, 0, 0.3); color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    #roomCode::placeholder { color: #3a4456; }
+    #roomCode:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
+    .chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .chip {
+      aspect-ratio: 1; font-size: 17px; font-weight: 700;
+      border: 1.5px solid var(--line); border-radius: 50%;
+      background: rgba(0, 0, 0, 0.25); color: var(--sub);
+      transition: transform .1s;
+    }
+    .chip:active { transform: scale(.92); }
+    .chip.sel {
+      border-color: transparent; color: #04130d;
+      background: linear-gradient(145deg, var(--primary), var(--primary-deep));
+      box-shadow: 0 6px 20px var(--glow);
+    }
+    .btn {
+      width: 100%; padding: 18px; font-size: 18px; font-weight: 800;
+      border: none; border-radius: 18px; transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.98); opacity: .85; }
+    .btn:disabled { opacity: .5; }
+    .btn-primary {
+      background: linear-gradient(145deg, var(--primary), var(--primary-deep)); color: #04130d;
+      box-shadow: 0 10px 30px var(--glow);
+    }
+    .btn-ghost { background: transparent; border: 1px solid var(--line); font-size: 15px; font-weight: 600; padding: 14px; color: var(--sub); }
+    .btn-leave { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.4); color: var(--danger); font-size: 16px; padding: 15px; }
+    .msg { min-height: 20px; font-size: 14px; text-align: center; color: var(--sub); margin: 0; line-height: 1.5; }
+    .msg.err { color: var(--danger); font-weight: 600; }
+    .gap { height: 20px; }
+
+    /* ---------- 통신 화면 ---------- */
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px; }
+    .topbar .room { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar .room small { font-weight: 600; color: var(--primary); margin-left: 8px; font-size: 14px; }
+    .conn {
+      font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 7px;
+      padding: 6px 12px; border-radius: 20px; background: var(--card); border: 1px solid var(--line);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+    .dot.off { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+
+    .hero { text-align: center; padding: 24px 20px 22px; transition: border-color .2s, box-shadow .2s, background .2s; }
+    .eq { height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 14px; }
+    .eq i { width: 6px; height: 8px; border-radius: 3px; background: #3a4456; transition: background .2s; }
+    .hero h2 { font-size: 22px; margin: 0 0 5px; letter-spacing: -0.5px; font-weight: 800; }
+    .hero p { margin: 0; font-size: 14px; color: var(--sub); }
+    .hero.rx { border-color: rgba(52,211,153,.6); background: rgba(52,211,153,.09); box-shadow: 0 0 50px rgba(52,211,153,.18); }
+    .hero.rx h2 { color: var(--primary); }
+    .hero.rx .eq i { background: var(--primary); animation: eq .7s ease-in-out infinite alternate; }
+    .hero.rx .eq i:nth-child(1) { animation-delay: -.1s; }
+    .hero.rx .eq i:nth-child(2) { animation-delay: -.45s; }
+    .hero.rx .eq i:nth-child(3) { animation-delay: -.25s; }
+    .hero.rx .eq i:nth-child(4) { animation-delay: -.6s; }
+    .hero.rx .eq i:nth-child(5) { animation-delay: -.35s; }
+    .hero.rx .eq i:nth-child(6) { animation-delay: -.5s; }
+    .hero.rx .eq i:nth-child(7) { animation-delay: -.15s; }
+    .hero.tx .eq i { background: var(--warn); animation: eq .7s ease-in-out infinite alternate; }
+    .hero.tx .eq i:nth-child(odd) { animation-delay: -.35s; }
+    .hero.mutedall .eq i { background: var(--warn); opacity: .5; }
+    @keyframes eq { from { height: 8px; } to { height: 44px; } }
+
+    .members { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px 8px; justify-items: center; }
+    .mem {
+      width: 46px; height: 46px; border-radius: 50%; padding: 0;
+      border: 2px solid transparent; background: rgba(255,255,255,.04); color: #414b5e;
+      font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
+      transition: box-shadow .15s, border-color .15s, transform .1s;
+    }
+    .mem:active { transform: scale(.9); }
+    .mem.live { color: var(--text); border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.08); }
+    .mem.me { color: #04130d; background: linear-gradient(145deg, var(--primary), var(--primary-deep)); border-color: transparent; }
+    .mem.talk { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.22), 0 0 18px var(--glow); color: var(--primary); }
+    .mem.me.talk { color: #04130d; }
+    .mem.cut { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); text-decoration: line-through; box-shadow: none; }
+    .legend { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--sub); margin: 16px 0 0; }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .legend b { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .hint { font-size: 12px; color: var(--sub); text-align: center; margin: 8px 0 0; }
+
+    .controls { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px 4px; }
+    .side {
+      background: none; border: none; padding: 0; width: 84px;
+      display: flex; flex-direction: column; align-items: center; gap: 9px;
+      font-size: 13px; font-weight: 600; color: var(--sub);
+    }
+    .side .circle {
+      width: 66px; height: 66px; border-radius: 50%;
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      display: flex; align-items: center; justify-content: center; transition: transform .1s;
+    }
+    .side:active .circle { transform: scale(.92); }
+    .side.warn { color: var(--warn); }
+    .side.warn .circle { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+    .side.active { color: var(--primary); }
+    .side.active .circle { background: rgba(52,211,153,.12); border-color: var(--primary); color: var(--primary); }
+
+    .micwrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    #micBtn {
+      width: 132px; height: 132px; border-radius: 50%; padding: 0;
+      border: 2px solid var(--line);
+      background: radial-gradient(circle at 35% 30%, #1f2a3d, #0e1524);
+      color: var(--sub);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 14px 34px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+      transition: transform .1s;
+    }
+    #micBtn.live {
+      border-color: transparent; color: #04130d;
+      background: radial-gradient(circle at 35% 30%, #6ee7b7, var(--primary-deep));
+      animation: ring 1.3s infinite; transform: scale(1.04);
+    }
+    #micBtn.off { border-color: var(--warn); color: var(--warn); }
+    @keyframes ring {
+      0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55), 0 14px 34px rgba(0,0,0,.5); }
+      100% { box-shadow: 0 0 0 28px rgba(52,211,153,0), 0 14px 34px rgba(0,0,0,.5); }
+    }
+    #micLabel { font-size: 15px; font-weight: 700; }
+    #micLabel.live { color: var(--primary); }
+    #micLabel.off { color: var(--warn); }
+
+    .opt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; font-size: 15px; }
+    .seg { display: flex; background: rgba(0,0,0,.35); border-radius: 13px; padding: 3px; }
+    .seg button { border: none; background: none; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--sub); }
+    .seg button.sel { background: rgba(255,255,255,.12); color: var(--text); }
+    .sw { width: 50px; height: 30px; border-radius: 15px; border: none; background: rgba(255,255,255,.14); position: relative; transition: background .15s; flex: none; }
+    .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .sw.on { background: var(--primary-deep); }
+    .sw.on::after { transform: translateX(20px); }
+
+    /* ---------- 대기(어두운) 화면 ---------- */
+    #standby {
+      position: fixed; inset: 0; z-index: 50; background: #000; color: #3f3f46;
+      display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+      text-align: center; padding: 30px;
+    }
+    #standby.on { display: flex; }
+    #standby .clock { font-size: 58px; font-weight: 200; color: #52525b; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+    #standby p { margin: 0; font-size: 14px; line-height: 1.6; }
+    #audio-container { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ================= 접속 화면 ================= -->
+<div class="screen on" id="joinScreen">
+  <div class="brand">
+    <div class="logo">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </div>
+    <h1>현장 무전기</h1>
+    <p>가입 없이, 같은 코드만 넣으면 최대 20명까지 연결</p>
+  </div>
+
+  <div class="card">
+    <p class="label">방 코드 · 숫자 5자리</p>
+    <input type="text" id="roomCode" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="00000" value="12345">
+    <div class="gap"></div>
+    <p class="label">내 번호 · 사람마다 다른 번호를 고르세요</p>
+    <div class="chips" id="numChips"></div>
+  </div>
+
+  <button class="btn btn-primary" id="joinBtn">통신 시작</button>
+  <button class="btn btn-ghost" id="inviteBtn">초대 링크 보내기</button>
+  <p class="msg" id="joinMsg"></p>
+</div>
+
+<!-- ================= 통신 화면 ================= -->
+<div class="screen" id="callScreen">
+  <div class="topbar">
+    <div class="room"><span id="roomLabel"></span><small id="meLabel"></small></div>
+    <div class="conn"><span class="dot" id="connDot"></span><span id="connText">연결됨</span></div>
+  </div>
+
+  <div class="card hero" id="hero">
+    <div class="eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <h2 id="heroTitle">수신 대기 중</h2>
+    <p id="heroSub"></p>
+  </div>
+
+  <div class="card">
+    <div class="members" id="members"></div>
+    <div class="legend">
+      <span><b style="background:var(--primary)"></b>나 / 말하는 중</span>
+      <span><b style="border:2px solid rgba(255,255,255,.5)"></b>연결됨</span>
+      <span><b style="background:var(--warn)"></b>음소거</span>
+    </div>
+    <p class="hint">번호를 누르면 그 사람 소리만 끌 수 있습니다</p>
+  </div>
+
+  <div class="controls">
+    <button class="side" id="listenBtn"></button>
+    <div class="micwrap">
+      <button id="micBtn" aria-label="마이크"></button>
+      <span id="micLabel"></span>
+    </div>
+    <button class="side" id="standbyBtn"></button>
+  </div>
+
+  <div class="card">
+    <div class="opt-row">
+      <span>말하는 방식</span>
+      <div class="seg">
+        <button id="modePtt">누르고 말하기</button>
+        <button id="modeOpen">자유 대화</button>
+      </div>
+    </div>
+    <div class="opt-row"><span>수신할 때 진동</span><button class="sw" id="vibSw" aria-label="진동"></button></div>
+    <div class="opt-row"><span>수신할 때 알림음</span><button class="sw" id="beepSw" aria-label="알림음"></button></div>
+  </div>
+
+  <button class="btn btn-leave" id="leaveBtn">통신 종료</button>
+</div>
+
+<!-- 대기 화면: 누군가 말하면 자동으로 걷힙니다 -->
+<div id="standby">
+  <div class="clock" id="sbClock">--:--</div>
+  <p>수신 대기 중<br>누군가 말하면 화면이 자동으로 켜집니다</p>
+  <p>화면을 터치하면 대기 화면을 끕니다</p>
+</div>
+
+<div id="audio-container"></div>
+
+<script>
+  /* ================= 설정값 ================= */
+  const APP_PREFIX = "edu-voice-";
+  const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
+  const MAX_BITRATE = 24000;      // 한 사람에게 보내는 음성 품질(bps). 낮출수록 데이터·배터리 절약
+  const VOICE_TH = 0.025;         // 이 값보다 소리가 크면 "말하는 중"으로 판단 (주변이 시끄러우면 0.04 정도로 올리세요)
+  const HOLD_MS = 600;            // 말이 끊긴 뒤 표시를 유지하는 시간
+  const ALERT_GAP_MS = 4000;      // 이 시간만큼 조용했다가 다시 말하면 진동/알림음
+  const STANDBY_BACK_MS = 8000;   // 수신이 끝나고 다시 어두워지기까지의 시간
+  const RETRY_WINDOW_MS = 120000; // 끊긴 상대에게 자동 재연결을 시도하는 시간(2분)
+
+  /* ================= 아이콘 ================= */
+  const svg = (inner, size) => `<svg width="${size || 26}" height="${size || 26}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  const IC = {
+    mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+    micOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+    vol: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+    volOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
+    moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+  };
+
+  /* ================= 상태 ================= */
+  const $ = (id) => document.getElementById(id);
+  let peer = null, localStream = null, audioCtx = null;
+  let localAnalyser = null, localSource = null;
+  let calls = {};          // 상대 ID -> 연결 정보
+  let lostAt = {};         // 번호 -> 끊긴 시각 (자동 재연결용)
+  let mutedNums = {};      // 번호 -> 개별 음소거 여부
+  let joined = false, code = "", myNum = 1;
+  let micOn = true, pttMode = true, pttHeld = false;
+  let listenMuted = false, vibrateOn = true, beepOn = false;
+  let standbyMode = false, lastRx = 0, rxActive = false, meSpeaking = false, lastMeVoice = 0;
+  let levelTimer = null, healTimer = null, wakeLock = null, lastSig = "", tick = 0;
+  const buf = new Uint8Array(512);
+
+  /* ================= 저장된 설정 불러오기 ================= */
+  function loadPref(k, d) { try { const v = localStorage.getItem("radio_" + k); return v === null ? d : v; } catch (e) { return d; } }
+  function savePref(k, v) { try { localStorage.setItem("radio_" + k, v); } catch (e) {} }
+
+  (function init() {
+    const urlCode = new URLSearchParams(location.search).get("code");
+    const saved = (urlCode && /^\d{5}$/.test(urlCode)) ? urlCode : loadPref("code", "12345");
+    $("roomCode").value = saved;
+    myNum = parseInt(loadPref("num", "1"), 10) || 1;
+    if (myNum < 1 || myNum > MAX_USERS) myNum = 1;
+    pttMode = loadPref("ptt20", "1") === "1";   // 20명용은 '누르고 말하기'가 기본
+    vibrateOn = loadPref("vib", "1") === "1";
+    beepOn = loadPref("beep", "0") === "1";
+
+    const chips = $("numChips");
+    for (let i = 1; i <= MAX_USERS; i++) {
+      const b = document.createElement("button");
+      b.className = "chip"; b.textContent = i;
+      b.onclick = () => { myNum = i; savePref("num", i); drawChips(); };
+      chips.appendChild(b);
+    }
+    drawChips();
+
+    const mem = $("members");
+    for (let i = 1; i <= MAX_USERS; i++) {
+      const b = document.createElement("button");
+      b.className = "mem"; b.id = "mem" + i; b.textContent = i;
+      b.onclick = () => togglePersonMute(i);
+      mem.appendChild(b);
+    }
+  })();
+
+  function drawChips() {
+    [...$("numChips").children].forEach((b, idx) => b.classList.toggle("sel", idx + 1 === myNum));
+  }
+  $("roomCode").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5); });
+
+  function joinMsg(text, isErr) { $("joinMsg").textContent = text || ""; $("joinMsg").classList.toggle("err", !!isErr); }
+
+  /* ================= 초대 링크 ================= */
+  $("inviteBtn").onclick = async () => {
+    const c = $("roomCode").value;
+    if (!/^\d{5}$/.test(c)) { joinMsg("먼저 방 코드 5자리를 입력해 주세요.", true); return; }
+    const url = location.origin + location.pathname + "?code=" + c;
+    try {
+      if (navigator.share) { await navigator.share({ title: "현장 무전기", text: "방 코드 " + c, url }); }
+      else { await navigator.clipboard.writeText(url); joinMsg("초대 링크를 복사했습니다."); }
+    } catch (e) { joinMsg(url); }
+  };
+
+  /* ================= 통신 시작 ================= */
+  $("joinBtn").onclick = startRadio;
+  $("leaveBtn").onclick = () => stopRadio("통신이 종료되었습니다.");
+
+  async function startRadio() {
+    code = $("roomCode").value;
+    if (!/^\d{5}$/.test(code)) { joinMsg("방 코드는 숫자 5자리로 입력해 주세요.", true); return; }
+    if (typeof Peer === "undefined") { joinMsg("통신 모듈을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.", true); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      joinMsg("이 주소에서는 마이크를 쓸 수 없습니다. https 주소로 접속해 주세요.", true); return;
+    }
+    savePref("code", code);
+    $("joinBtn").disabled = true;
+    joinMsg("마이크 권한 확인 중...");
+
+    // 소리 분석기는 버튼을 누른 직후에 만들어야 스마트폰에서 막히지 않습니다
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+    } catch (e) { audioCtx = null; }
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false
+      });
+    } catch (err) {
+      $("joinBtn").disabled = false;
+      joinMsg("마이크 권한을 허용해야 통신할 수 있습니다.", true);
+      return;
+    }
+
+    if (audioCtx) {
+      localSource = audioCtx.createMediaStreamSource(localStream);
+      localAnalyser = audioCtx.createAnalyser(); localAnalyser.fftSize = 512;
+      localSource.connect(localAnalyser);
+    }
+
+    micOn = true; pttHeld = false; listenMuted = false; mutedNums = {}; lostAt = {};
+    applyMic();
+    joinMsg("서버에 접속 중...");
+
+    peer = new Peer(`${APP_PREFIX}${code}-${myNum}`);
+
+    peer.on("open", () => {
+      if (!joined) {
+        joined = true;
+        $("joinScreen").classList.remove("on");
+        $("callScreen").classList.add("on");
+        $("roomLabel").textContent = "방 " + code;
+        $("meLabel").textContent = myNum + "번";
+        window.scrollTo(0, 0);
+        levelTimer = setInterval(levelLoop, 100);
+        healTimer = setInterval(healLoop, 5000);
+        acquireWake();
+      }
+      setConn(true);
+      // 접속(또는 재접속)하면 아직 연결 안 된 번호 모두에게 연결 시도
+      // 한꺼번에 걸면 휴대폰에 무리가 가므로 0.12초 간격으로 차례대로 겁니다
+      let k = 0;
+      for (let i = 1; i <= MAX_USERS; i++) {
+        if (i === myNum) continue;
+        setTimeout(() => placeCall(i), 120 * k++);
+      }
+      render(true);
+    });
+
+    peer.on("call", onIncoming);
+
+    peer.on("disconnected", () => {
+      setConn(false);
+      setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch (e) {} } }, 2000);
+    });
+
+    peer.on("error", (err) => {
+      if (err.type === "peer-unavailable") {
+        // 상대가 아직 안 들어온 경우: 정상. 걸어 둔 연결만 정리
+        const m = /peer (\S+)/.exec(err.message || "");
+        if (m && calls[m[1]] && !calls[m[1]].connected) drop(calls[m[1]]);
+        return;
+      }
+      if (err.type === "unavailable-id") {
+        stopRadio(myNum + "번은 이미 다른 사람이 쓰고 있습니다. 다른 번호를 고르거나 잠시 후 다시 시도해 주세요.", true);
+        return;
+      }
+      if (err.type === "browser-incompatible") { stopRadio("이 브라우저는 음성 통신을 지원하지 않습니다.", true); return; }
+      console.error("Peer 오류:", err.type, err);
+      if (!joined) stopRadio("서버 접속에 실패했습니다. 인터넷 연결을 확인해 주세요.", true);
+      else setConn(false);
+    });
+  }
+
+  function setConn(ok) {
+    $("connDot").classList.toggle("off", !ok);
+    $("connText").textContent = ok ? "연결됨" : "재연결 중";
+  }
+
+  /* ================= 연결 관리 ================= */
+  const idOf = (n) => `${APP_PREFIX}${code}-${n}`;
+
+  function placeCall(num) {
+    if (!joined || !peer || peer.destroyed || peer.disconnected || !localStream) return;
+    if (calls[idOf(num)]) return;
+    const call = peer.call(idOf(num), localStream);
+    if (call) register(call, num);
+  }
+
+  function onIncoming(call) {
+    const m = new RegExp("^" + APP_PREFIX + code + "-(\\d+)$").exec(call.peer);
+    if (!m) return;
+    const num = parseInt(m[1], 10);
+    if (num < 1 || num > MAX_USERS || num === myNum) return;
+    const existing = calls[call.peer];
+    if (existing) {
+      // 서로 동시에 걸었을 때: 번호가 작은 쪽이 건 연결만 살립니다
+      if (!existing.connected && myNum < num) return;
+      drop(existing);
+    }
+    call.answer(localStream);
+    register(call, num);
+  }
+
+  // 보내는 음성 품질을 제한해서 데이터와 배터리를 아낍니다 (20명 대응)
+  function limitBitrate(pc) {
+    try {
+      pc.getSenders().forEach((s) => {
+        if (!s.track || s.track.kind !== "audio") return;
+        const p = s.getParameters();
+        if (!p.encodings || !p.encodings.length) return;
+        p.encodings[0].maxBitrate = MAX_BITRATE;
+        s.setParameters(p).catch(() => {});
+      });
+    } catch (e) {}
+  }
+
+  function register(call, num) {
+    const entry = { call, num, connected: false, dead: false, lastVoice: 0, speaking: false };
+    calls[call.peer] = entry;
+    entry.pendingTimer = setTimeout(() => { if (!entry.connected) drop(entry); }, 12000);
+
+    call.on("stream", (remoteStream) => {
+      if (entry.connected || entry.dead) return;
+      entry.connected = true;
+      clearTimeout(entry.pendingTimer);
+      delete lostAt[num];
+      if (call.peerConnection) limitBitrate(call.peerConnection);
+
+      const audioEl = document.createElement("audio");
+      audioEl.srcObject = remoteStream;
+      audioEl.autoplay = true;
+      audioEl.setAttribute("playsinline", "");
+      audioEl.muted = listenMuted || !!mutedNums[num];
+      $("audio-container").appendChild(audioEl);
+      const p = audioEl.play(); if (p && p.catch) p.catch(() => {});
+      entry.audioEl = audioEl;
+
+      if (audioCtx) {
+        try {
+          entry.source = audioCtx.createMediaStreamSource(remoteStream);
+          entry.analyser = audioCtx.createAnalyser(); entry.analyser.fftSize = 512;
+          entry.source.connect(entry.analyser);
+        } catch (e) {}
+      }
+      render(true);
+    });
+    call.on("close", () => lose(entry));
+    call.on("error", () => lose(entry));
+
+    const pc = call.peerConnection;
+    if (pc) {
+      pc.addEventListener("iceconnectionstatechange", () => {
+        const s = pc.iceConnectionState;
+        clearTimeout(entry.iceTimer);
+        if (s === "failed" || s === "closed") lose(entry);
+        else if (s === "disconnected") entry.iceTimer = setTimeout(() => lose(entry), 4000);
+      });
+    }
+  }
+
+  // 상대와 끊겼을 때 (자동 재연결 대상으로 기록)
+  function lose(entry) {
+    if (entry.dead) return;
+    if (entry.connected && joined) lostAt[entry.num] = Date.now();
+    drop(entry);
+  }
+
+  function drop(entry) {
+    if (entry.dead) return;
+    entry.dead = true;
+    clearTimeout(entry.pendingTimer); clearTimeout(entry.iceTimer);
+    if (calls[entry.call.peer] === entry) delete calls[entry.call.peer];
+    if (entry.audioEl) { entry.audioEl.srcObject = null; entry.audioEl.remove(); }
+    if (entry.source) { try { entry.source.disconnect(); } catch (e) {} }
+    try { entry.call.close(); } catch (e) {}
+    render(true);
+  }
+
+  // 끊긴 상대에게 2분 동안 5초마다 다시 연결 시도 (번호가 작은 쪽이 겁니다)
+  function healLoop() {
+    if (!joined) return;
+    const now = Date.now();
+    for (let i = myNum + 1; i <= MAX_USERS; i++) {
+      if (lostAt[i] && now - lostAt[i] < RETRY_WINDOW_MS && !calls[idOf(i)]) placeCall(i);
+    }
+  }
+
+  /* ================= 소리 감지 (누가 말하는지) ================= */
+  function levelOf(analyser) {
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    return Math.sqrt(sum / buf.length);
+  }
+
+  function levelLoop() {
+    const now = performance.now();
+    tick++;
+    let heard = false; // 내가 실제로 듣고 있는 사람이 말하는 중인지
+
+    for (const id in calls) {
+      const e = calls[id];
+      if (!e.connected || !e.analyser) { e.speaking = false; continue; }
+      if (levelOf(e.analyser) > VOICE_TH) e.lastVoice = now;
+      e.speaking = e.lastVoice > 0 && now - e.lastVoice < HOLD_MS;
+      if (e.speaking && !listenMuted && !mutedNums[e.num]) heard = true;
+    }
+
+    if (localAnalyser && micLive()) {
+      if (levelOf(localAnalyser) > VOICE_TH) lastMeVoice = now;
+      meSpeaking = lastMeVoice > 0 && now - lastMeVoice < HOLD_MS;
+    } else meSpeaking = false;
+
+    if (heard) {
+      if (!rxActive && (lastRx === 0 || now - lastRx > ALERT_GAP_MS)) alertRx();
+      lastRx = now;
+    }
+    rxActive = heard;
+
+    // 대기 화면: 수신하면 걷히고, 조용해지면 다시 어두워짐
+    if (standbyMode) {
+      const dark = !heard && (lastRx === 0 || now - lastRx > STANDBY_BACK_MS);
+      $("standby").classList.toggle("on", dark);
+      if (dark && tick % 10 === 0) drawClock();
+    }
+    render(false);
+  }
+
+  function alertRx() {
+    if (vibrateOn && navigator.vibrate) { try { navigator.vibrate([150, 80, 150]); } catch (e) {} }
+    if (beepOn && audioCtx) {
+      try {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 880; g.gain.value = 0.15;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + 0.12);
+      } catch (e) {}
+    }
+  }
+
+  /* ================= 마이크 / 음소거 ================= */
+  const micLive = () => pttMode ? pttHeld : micOn;
+  function applyMic() {
+    if (!localStream) return;
+    const t = localStream.getAudioTracks()[0];
+    if (t) t.enabled = micLive();
+  }
+
+  const micBtn = $("micBtn");
+  micBtn.addEventListener("click", () => { if (!pttMode) { micOn = !micOn; applyMic(); render(true); } });
+  micBtn.addEventListener("pointerdown", (e) => {
+    if (!pttMode) return;
+    e.preventDefault();
+    try { micBtn.setPointerCapture(e.pointerId); } catch (err) {}
+    pttHeld = true; applyMic(); render(true);
+  });
+  const pttUp = () => { if (pttMode && pttHeld) { pttHeld = false; applyMic(); render(true); } };
+  micBtn.addEventListener("pointerup", pttUp);
+  micBtn.addEventListener("pointercancel", pttUp);
+  micBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  $("modeOpen").onclick = () => { pttMode = false; micOn = true; pttHeld = false; savePref("ptt20", "0"); applyMic(); render(true); };
+  $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt20", "1"); applyMic(); render(true); };
+
+  // 전체 수신 음소거
+  $("listenBtn").onclick = () => { listenMuted = !listenMuted; applyListen(); render(true); };
+  // 한 사람만 음소거
+  function togglePersonMute(num) {
+    if (num === myNum) return;
+    mutedNums[num] = !mutedNums[num];
+    applyListen(); render(true);
+  }
+  function applyListen() {
+    for (const id in calls) {
+      const e = calls[id];
+      if (e.audioEl) e.audioEl.muted = listenMuted || !!mutedNums[e.num];
+    }
+  }
+
+  $("vibSw").onclick = () => { vibrateOn = !vibrateOn; savePref("vib", vibrateOn ? "1" : "0"); render(true); };
+  $("beepSw").onclick = () => { beepOn = !beepOn; savePref("beep", beepOn ? "1" : "0"); render(true); };
+
+  /* ================= 대기 화면 / 화면 꺼짐 방지 ================= */
+  $("standbyBtn").onclick = () => {
+    standbyMode = !standbyMode;
+    lastRx = 0;
+    if (standbyMode) { drawClock(); $("standby").classList.add("on"); } else $("standby").classList.remove("on");
+    render(true);
+  };
+  $("standby").onclick = () => { standbyMode = false; $("standby").classList.remove("on"); render(true); };
+
+  function drawClock() {
+    const d = new Date();
+    $("sbClock").textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
+  async function acquireWake() {
+    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && joined) {
+      acquireWake();
+      if (audioCtx && audioCtx.state !== "running") audioCtx.resume();
+    }
+  });
+  window.addEventListener("pagehide", () => { if (peer) { try { peer.destroy(); } catch (e) {} } });
+
+  /* ================= 화면 그리기 ================= */
+  function render(force) {
+    if (!joined) return;
+    const talkers = [], live = [];
+    for (const id in calls) {
+      const e = calls[id];
+      if (e.connected) { live.push(e.num); if (e.speaking) talkers.push(e.num); }
+    }
+    talkers.sort((a, b) => a - b); live.sort((a, b) => a - b);
+    const sig = [talkers.join(), live.join(), meSpeaking, micLive(), pttMode, listenMuted, standbyMode,
+                 vibrateOn, beepOn, JSON.stringify(mutedNums)].join("|");
+    if (!force && sig === lastSig) return;
+    lastSig = sig;
+
+    // 가운데 큰 표시
+    const hero = $("hero");
+    const audible = talkers.filter((n) => !listenMuted && !mutedNums[n]);
+    hero.classList.toggle("rx", audible.length > 0);
+    hero.classList.toggle("tx", audible.length === 0 && meSpeaking);
+    hero.classList.toggle("mutedall", listenMuted);
+    if (talkers.length > 0) {
+      const names = talkers.length > 3 ? talkers.slice(0, 3).map((n) => n + "번").join(", ") + " 외 " + (talkers.length - 3) + "명"
+                                       : talkers.map((n) => n + "번").join(", ");
+      $("heroTitle").textContent = names + " 말하는 중";
+      $("heroSub").textContent = audible.length ? "수신 중" : "음소거해 둔 상태라 소리는 나지 않습니다";
+    } else if (meSpeaking) {
+      $("heroTitle").textContent = "내가 말하는 중";
+      $("heroSub").textContent = "상대방에게 전달되고 있습니다";
+    } else {
+      $("heroTitle").textContent = listenMuted ? "수신 음소거 중" : "수신 대기 중";
+      $("heroSub").textContent = live.length ? `연결된 사람 ${live.length}명 (나 포함 ${live.length + 1}명)` : "아직 연결된 사람이 없습니다";
+    }
+
+    // 참가자 20칸
+    for (let i = 1; i <= MAX_USERS; i++) {
+      const isMe = i === myNum, isLive = live.includes(i), isTalk = isMe ? meSpeaking : talkers.includes(i);
+      const cut = !isMe && !!mutedNums[i];
+      $("mem" + i).className = "mem" + (isMe ? " me" : "") + (isLive ? " live" : "") + (isTalk && !cut ? " talk" : "") + (cut ? " cut" : "");
+    }
+
+    // 아래 버튼 3개
+    const lb = $("listenBtn");
+    lb.className = "side" + (listenMuted ? " warn" : "");
+    lb.innerHTML = `<span class="circle">${svg(listenMuted ? IC.volOff : IC.vol)}</span><span>${listenMuted ? "소리 꺼짐" : "소리 켜짐"}</span>`;
+
+    const on = micLive();
+    const offState = !on && !pttMode;
+    micBtn.className = on ? "live" : (offState ? "off" : "");
+    micBtn.innerHTML = svg(on || pttMode ? IC.mic : IC.micOff, 46);
+    const ml = $("micLabel");
+    ml.className = on ? "live" : (offState ? "off" : "");
+    ml.textContent = pttMode ? (on ? "말하는 중..." : "누르고 말하기") : (on ? "마이크 켜짐" : "마이크 꺼짐");
+
+    const sb = $("standbyBtn");
+    sb.className = "side" + (standbyMode ? " active" : "");
+    sb.innerHTML = `<span class="circle">${svg(IC.moon)}</span><span>대기 화면</span>`;
+
+    $("modeOpen").classList.toggle("sel", !pttMode);
+    $("modePtt").classList.toggle("sel", pttMode);
+    $("vibSw").classList.toggle("on", vibrateOn);
+    $("beepSw").classList.toggle("on", beepOn);
+  }
+
+  /* ================= 통신 종료 ================= */
+  function stopRadio(message, isErr) {
+    joined = false;
+    clearInterval(levelTimer); clearInterval(healTimer);
+    Object.values(calls).forEach(drop);
+    calls = {}; lostAt = {};
+    if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+    if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+    localAnalyser = null; localSource = null;
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    standbyMode = false; rxActive = false; meSpeaking = false; lastRx = 0; lastSig = "";
+    $("standby").classList.remove("on");
+    $("audio-container").innerHTML = "";
+    $("callScreen").classList.remove("on");
+    $("joinScreen").classList.add("on");
+    $("joinBtn").disabled = false;
+    joinMsg(message || "", isErr);
+  }
+</script>
+</body>
+</html>

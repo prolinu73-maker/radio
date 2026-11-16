@@ -248,6 +248,7 @@
     .updbar button { border: none; border-radius: 10px; padding: 7px 14px; font-size: 14px; font-weight: 800; background: #1a1100; color: #fff; }
     .wakest { font-size: 13px; font-weight: 600; color: var(--warn); text-align: right; }
     .wakest.ok { color: var(--primary); }
+    .note { font-size: 12px; color: var(--sub); line-height: 1.6; margin: 8px 0 0; }
 
     /* ---------- 이름 입력 / 번호 아래 이름 ---------- */
     .field {
@@ -372,6 +373,8 @@
     <div class="opt-row"><span>수신할 때 알림음</span><button class="sw" id="beepSw" aria-label="알림음"></button></div>
     <div class="opt-row"><span>초대 QR코드</span><button class="mini" id="qrBtn2" type="button">보기</button></div>
     <div class="opt-row"><span>화면 자동 꺼짐 방지</span><span class="wakest" id="wakeSt">확인 중</span></div>
+    <div class="opt-row"><span>화면 꺼도 수신 유지</span><span class="wakest" id="bgSt">확인 중</span></div>
+    <p class="note">전원 버튼으로 화면을 꺼도 소리를 받도록 시도합니다. 알림창의 재생/일시정지 버튼을 누르면 마이크를 켜고 끌 수 있습니다. 기기에 따라 말하기(마이크)는 화면이 꺼지면 멈출 수 있습니다.</p>
   </div>
 
   <button class="btn btn-leave" id="leaveBtn">통신 종료</button>
@@ -2691,7 +2694,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-b";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
+  const APP_VERSION = "2026.11.17-c";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
   const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
@@ -2727,6 +2730,7 @@ var qrcode = function() {
   let wakeVideo = null, wakeDraw = null;
   let scanPeer = null, scanTimer = null, scanBusy = false, scanToken = 0, usedNums = {}, usedNames = {};
   let names = {}, myName = "";
+  let keepAudio = null, keepUrl = null, lastMS = "";
   let lastUpdCheck = 0, remoteVer = null;
   const buf = new Uint8Array(512);
 
@@ -2887,6 +2891,7 @@ var qrcode = function() {
     myName = $("userName").value.trim().slice(0, 6); savePref("name", myName);
     stopScan();
     acquireWake();   // 화면 꺼짐 방지는 버튼을 누른 직후에 요청해야 잘 됩니다
+    startKeepAlive();
     $("joinBtn").disabled = true;
     joinMsg("마이크 권한 확인 중...");
 
@@ -2929,6 +2934,7 @@ var qrcode = function() {
         levelTimer = setInterval(levelLoop, 100);
         healTimer = setInterval(healLoop, 5000);
         acquireWake();
+        updateMediaSession();
       }
       setConn(true);
       // 접속(또는 재접속)하면 아직 연결 안 된 번호 모두에게 연결 시도
@@ -3100,6 +3106,7 @@ var qrcode = function() {
   function healLoop() {
     if (!joined) return;
     acquireWake();   // 화면 꺼짐 방지가 풀렸으면 다시 걸어 둡니다
+    if (keepAudio && keepAudio.paused) keepAudio.play().catch(() => {});
     const now = Date.now();
     for (let i = myNum + 1; i <= MAX_USERS; i++) {
       if (lostAt[i] && now - lostAt[i] < RETRY_WINDOW_MS && !calls[idOf(i)]) placeCall(i);
@@ -3261,6 +3268,81 @@ var qrcode = function() {
   // 화면을 터치할 때 아직 안 걸려 있으면 다시 시도 (일부 기기는 터치가 있어야 허용)
   document.addEventListener("pointerdown", () => { if (joined) acquireWake(); });
 
+  /* ================= 화면이 꺼져도 유지 (최대한 시도) ================= */
+  // 무음 소리를 계속 재생하면 브라우저가 "소리 나는 페이지"로 보고 화면이 꺼져도 멈추지 않게 둡니다.
+  // 알림창에는 미디어 재생 카드가 뜨며, 재생/일시정지 버튼으로 마이크를 켜고 끌 수 있습니다.
+  function makeSilentWav() {
+    const rate = 8000, n = rate;   // 1초 길이
+    const buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    w(36, "data"); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128 + (i % 2));   // 사실상 무음
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  function bgStatus(t, ok) { const el = $("bgSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }
+
+  function startKeepAlive() {
+    try {
+      if (!keepAudio) {
+        keepUrl = URL.createObjectURL(makeSilentWav());
+        const a = document.createElement("audio");
+        a.src = keepUrl; a.loop = true; a.volume = 0.05;
+        a.setAttribute("playsinline", "");
+        document.body.appendChild(a);
+        keepAudio = a;
+      }
+      const pr = keepAudio.play();
+      if (pr && pr.then) pr.then(() => bgStatus("켜짐", true)).catch(() => bgStatus("화면을 한 번 터치해 주세요", false));
+      else bgStatus("켜짐", true);
+    } catch (e) { bgStatus("이 기기는 지원 안 됨", false); }
+    try {
+      if ("mediaSession" in navigator) {
+        const toggle = () => {
+          if (!pttMode) { micOn = !micOn; applyMic(); render(true); }
+          if (keepAudio) keepAudio.play().catch(() => {});
+        };
+        navigator.mediaSession.setActionHandler("play", toggle);
+        navigator.mediaSession.setActionHandler("pause", toggle);
+      }
+    } catch (e) {}
+  }
+
+  function updateMediaSession() {
+    if (!joined || !("mediaSession" in navigator)) return;
+    try {
+      const state = pttMode ? "누르고 말하기 방식" : (micOn ? "마이크 켜짐" : "마이크 꺼짐");
+      const key = code + "|" + myNum + "|" + state;
+      if (key === lastMS) return;
+      lastMS = key;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "현장 무전기 · 방 " + code + " · " + myNum + "번",
+        artist: state,
+        album: "재생/일시정지 버튼 = 마이크 켜기/끄기",
+        artwork: [{ src: "icon-512.png", sizes: "512x512", type: "image/png" }]
+      });
+      navigator.mediaSession.playbackState = "playing";
+    } catch (e) {}
+  }
+
+  function stopKeepAlive() {
+    if (keepAudio) { try { keepAudio.pause(); keepAudio.removeAttribute("src"); keepAudio.load(); keepAudio.remove(); } catch (e) {} keepAudio = null; }
+    if (keepUrl) { try { URL.revokeObjectURL(keepUrl); } catch (e) {} keepUrl = null; }
+    try {
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = "none";
+        navigator.mediaSession.setActionHandler("play", null);
+        navigator.mediaSession.setActionHandler("pause", null);
+      }
+    } catch (e) {}
+    lastMS = "";
+    bgStatus("확인 중", false);
+  }
+
   /* ================= 새 버전 확인 ================= */
   async function checkUpdate() {
     if (!/^https?:/.test(location.protocol)) return;
@@ -3286,6 +3368,7 @@ var qrcode = function() {
   $("updBtn").onclick = applyUpdate;
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) checkUpdate();
+    if (joined && keepAudio && keepAudio.paused) keepAudio.play().catch(() => {});
     if (!document.hidden && joined) {
       acquireWake();
       if (audioCtx && audioCtx.state !== "running") audioCtx.resume();
@@ -3355,6 +3438,7 @@ var qrcode = function() {
     $("modePtt").classList.toggle("sel", pttMode);
     $("vibSw").classList.toggle("on", vibrateOn);
     $("beepSw").classList.toggle("on", beepOn);
+    updateMediaSession();
   }
 
   /* ================= 통신 종료 ================= */
@@ -3367,7 +3451,7 @@ var qrcode = function() {
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
     localAnalyser = null; localSource = null;
-    stopWake();
+    stopWake(); stopKeepAlive();
     standbyMode = false; rxActive = false; meSpeaking = false; lastRx = 0; lastSig = "";
     $("standby").classList.remove("on");
     $("audio-container").innerHTML = "";

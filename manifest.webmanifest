@@ -1,7 +1,7 @@
 {
-  "name": "현장 무전기",
-  "short_name": "무전기",
-  "description": "가입 없이 쓰는 단체 음성 무전기",
+  "name": "라방",
+  "short_name": "라방",
+  "description": "가입 없이 쓰는 단체 음성 대화",
   "start_url": "./voice.html",
   "scope": "./",
   "display": "standalone",

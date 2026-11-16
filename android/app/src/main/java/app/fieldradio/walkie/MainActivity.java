@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " FieldRadioApp/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " FieldRadioApp/1.1");
 
         web.addJavascriptInterface(new Bridge(), "AndroidKeeper");
 
@@ -213,7 +213,54 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String version() {
-            return "1.0";
+            return "1.1";
+        }
+
+        /** 앱 종료: 서비스를 멈추고 앱을 최근 목록에서도 완전히 닫습니다. */
+        @JavascriptInterface
+        public void exit() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    stopService(new Intent(MainActivity.this, VoiceService.class));
+                    finishAndRemoveTask();
+                }
+            });
+        }
+
+        /** 누군가 말하면 꺼진 화면을 잠깐 켭니다. */
+        @JavascriptInterface
+        @SuppressWarnings("deprecation")
+        public void wake() {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    PowerManager.WakeLock wl = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+                            "fieldradio:screen");
+                    wl.acquire(6000);
+                }
+            } catch (Exception e) {
+                // 화면을 켜지 못해도 통신은 계속
+            }
+        }
+
+        /** 초대 링크 보내기: 안드로이드 공유 화면(카카오톡 등)을 엽니다. */
+        @JavascriptInterface
+        public void share(final String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("text/plain");
+                        send.putExtra(Intent.EXTRA_TEXT, text);
+                        startActivity(Intent.createChooser(send, "초대 보내기"));
+                    } catch (Exception e) {
+                        // 공유할 앱이 없으면 무시
+                    }
+                }
+            });
         }
     }
 

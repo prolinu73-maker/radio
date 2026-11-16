@@ -32,7 +32,7 @@ public class VoiceService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String title = "현장 무전기";
+        String title = "라방";
         String text = "통신 중입니다";
         if (intent != null) {
             if (intent.getStringExtra("title") != null) {
@@ -64,8 +64,8 @@ public class VoiceService extends Service {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null && nm.getNotificationChannel(CHANNEL) == null) {
-                NotificationChannel ch = new NotificationChannel(CHANNEL, "통신 중 표시", NotificationManager.IMPORTANCE_LOW);
-                ch.setDescription("무전기 통신이 켜져 있는 동안 표시됩니다");
+                NotificationChannel ch = new NotificationChannel(CHANNEL, "라방 통신 중 표시", NotificationManager.IMPORTANCE_LOW);
+                ch.setDescription("라방 통신이 켜져 있는 동안 표시됩니다");
                 nm.createNotificationChannel(ch);
             }
         }

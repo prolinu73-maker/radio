@@ -10,8 +10,8 @@ android {
         applicationId "app.fieldradio.walkie"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
     }
 
     // 앱을 새로 만들어도 같은 서명이 되도록 고정 키를 씁니다 (덮어쓰기 설치가 가능해짐)

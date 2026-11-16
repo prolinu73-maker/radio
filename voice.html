@@ -11,9 +11,9 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="무전기">
+  <meta name="apple-mobile-web-app-title" content="라방">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>현장 무전기</title>
+  <title>라방</title>
   <!-- 무료 P2P 통신 라이브러리 (가입 불필요) -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
@@ -307,6 +307,28 @@
     .mem.wh { border-color: #a78bfa; }
     .mem.wto { border-color: #a78bfa; color: #ddd6fe; box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.25), 0 0 18px rgba(167, 139, 250, 0.45); }
     .modal .btn { margin-top: 10px; }
+
+    /* ---------- 라방: 설정 / 길게 눌러 말하기 / 안내 ---------- */
+    .gear { flex: none; width: 42px; height: 42px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--text); display: flex; align-items: center; justify-content: center; }
+    .gear:active { transform: scale(.92); }
+    .joinhead { position: relative; }
+    .joinhead .gear { position: absolute; right: 0; top: 14px; }
+    .topright { display: flex; align-items: center; gap: 10px; }
+    .codehint { font-size: 13px; color: var(--sub); text-align: center; margin: 10px 0 0; min-height: 18px; }
+    .codehint.ok { color: var(--primary); font-weight: 600; }
+    .txtbtn { border: none; background: none; color: var(--sub); font-size: 14px; font-weight: 600; padding: 10px; text-decoration: underline; text-underline-offset: 3px; }
+    .mem { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    .mem.hold { transform: scale(1.14); border-color: #a78bfa; color: #ddd6fe; box-shadow: 0 0 0 5px rgba(167, 139, 250, 0.3), 0 0 22px rgba(167, 139, 250, 0.6); }
+    #leaveBtn .circle { color: var(--danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.07); }
+    .onlyjoined { display: none !important; }
+    #setModal.incall .opt-row.onlyjoined { display: flex !important; }
+    #setModal.incall .btn.onlyjoined { display: block !important; }
+    .nativeonly { display: none !important; }
+    body.native .nativeonly { display: flex !important; }
+    #setModal .opt-row { padding: 9px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    #setModal .btn { margin-top: 12px; }
+    #toast { position: fixed; left: 50%; bottom: calc(34px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 90; background: #1f2a3d; border: 1px solid var(--line); border-radius: 14px; padding: 11px 18px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+    #toast.on { opacity: 1; }
   </style>
 </head>
 <body>
@@ -315,12 +337,13 @@
 
 <!-- ================= 접속 화면 ================= -->
 <div class="screen on" id="joinScreen">
-  <div class="brand">
+  <div class="brand joinhead">
+    <button class="gear" id="gearJoin" type="button" aria-label="설정"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <div class="logo">
       <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </div>
-    <h1>현장 무전기</h1>
-    <p>가입 없이, 같은 코드만 넣으면 최대 20명까지 연결</p>
+    <h1>라방</h1>
+    <p>가입 없이 방 코드만 입력하면 최대 20명이 대화합니다</p>
   </div>
 
   <div class="card promo warn" id="inappCard">
@@ -331,6 +354,7 @@
   <div class="card">
     <p class="label">방 코드 · 숫자 5자리</p>
     <input type="text" id="roomCode" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="00000" value="12345">
+    <p class="codehint" id="codeHint"></p>
     <div class="gap"></div>
     <p class="label">내 이름 · 번호 원 안에 성을 뺀 이름으로 보입니다 (선택)</p>
     <input type="text" class="field" id="userName" maxlength="6" autocomplete="off" placeholder="예: 김철수">
@@ -340,13 +364,9 @@
     <div class="chipnote"><span id="scanText">방 코드를 입력하면 사용 중인 번호를 확인합니다</span><button id="rescanBtn" type="button">다시 확인</button></div>
   </div>
 
-  <button class="btn btn-primary" id="joinBtn">통신 시작</button>
-  <div class="row2"><button class="btn btn-ghost" id="qrBtn" type="button">QR로 초대</button><button class="btn btn-ghost" id="inviteBtn" type="button">링크 보내기</button></div>
-  <div class="card promo" id="installCard">
-    <div><b>앱처럼 설치하기</b><span>홈 화면에 아이콘이 생겨 한 번에 실행됩니다</span></div>
-    <button id="installBtn" type="button">설치</button>
-  </div>
+  <button class="btn btn-primary" id="joinBtn">방 들어가기</button>
   <p class="msg" id="joinMsg"></p>
+  <button class="txtbtn" id="exitBtn1" type="button">앱 종료</button>
   <p class="ver"></p>
 </div>
 
@@ -354,7 +374,10 @@
 <div class="screen" id="callScreen">
   <div class="topbar">
     <div class="room"><span id="roomLabel"></span><small id="meLabel"></small></div>
-    <div class="conn"><span class="dot" id="connDot"></span><span id="connText">연결됨</span></div>
+    <div class="topright">
+      <div class="conn"><span class="dot" id="connDot"></span><span id="connText">연결됨</span></div>
+      <button class="gear" id="gearCall" type="button" aria-label="설정"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </div>
   </div>
 
   <div class="card hero" id="hero">
@@ -367,12 +390,7 @@
 
   <div class="card">
     <div class="members" id="members"></div>
-    <div class="legend">
-      <span><b style="background:var(--primary)"></b>나 / 말하는 중</span>
-      <span><b style="border:2px solid rgba(255,255,255,.5)"></b>연결됨</span>
-      <span><b style="background:var(--warn)"></b>음소거</span>
-    </div>
-    <p class="hint">번호를 누르면 귓속말 · 소리 끄기를 고를 수 있습니다</p>
+    <p class="hint">번호를 <b>길게 누른 채 말하면</b> 그 사람에게만 전달됩니다 · 짧게 누르면 메뉴</p>
   </div>
 
   <div class="controls">
@@ -381,27 +399,8 @@
       <button id="micBtn" aria-label="마이크"></button>
       <span id="micLabel"></span>
     </div>
-    <button class="side" id="standbyBtn"></button>
+    <button class="side" id="leaveBtn"></button>
   </div>
-
-  <div class="card">
-    <div class="opt-row">
-      <span>말하는 방식</span>
-      <div class="seg">
-        <button id="modeOpen">켜고 끄기</button>
-        <button id="modePtt">누르고 말하기</button>
-      </div>
-    </div>
-    <div class="opt-row"><span>수신할 때 진동</span><button class="sw" id="vibSw" aria-label="진동"></button></div>
-    <div class="opt-row"><span>수신할 때 알림음</span><button class="sw" id="beepSw" aria-label="알림음"></button></div>
-    <div class="opt-row"><span>초대 QR코드</span><button class="mini" id="qrBtn2" type="button">보기</button></div>
-    <div class="opt-row"><span>화면 자동 꺼짐 방지</span><span class="wakest" id="wakeSt">확인 중</span></div>
-    <div class="opt-row"><span>화면 꺼도 수신 유지</span><span class="wakest" id="bgSt">확인 중</span></div>
-    <p class="note">전원 버튼으로 화면을 꺼도 소리를 받도록 시도합니다. 알림창의 재생/일시정지 버튼을 누르면 마이크를 켜고 끌 수 있습니다. 기기에 따라 말하기(마이크)는 화면이 꺼지면 멈출 수 있습니다.</p>
-  </div>
-
-  <button class="btn btn-leave" id="leaveBtn">통신 종료</button>
-  <p class="ver"></p>
 </div>
 
 <!-- 대기 화면: 누군가 말하면 자동으로 걷힙니다 -->
@@ -411,8 +410,30 @@
   <p>화면을 터치하면 대기 화면을 끕니다</p>
 </div>
 
+<div class="modal" id="setModal"><div class="sheet">
+  <h3>설정</h3>
+  <div class="opt-row"><span>말하는 방식</span>
+    <div class="seg"><button id="modeOpen">켜고 끄기</button><button id="modePtt">누르고 말하기</button></div>
+  </div>
+  <div class="opt-row"><span>무전 신호음 (띠리리릭)</span><button class="sw" id="rogerSw" aria-label="무전 신호음"></button></div>
+  <div class="opt-row"><span>수신할 때 진동</span><button class="sw" id="vibSw" aria-label="진동"></button></div>
+  <div class="opt-row nativeonly"><span>수신할 때 화면 켜기</span><button class="sw" id="wakeSw" aria-label="수신 시 화면 켜기"></button></div>
+  <div class="opt-row"><span>초대 QR코드 (앱 설치)</span><button class="mini" id="qrBtn2" type="button">보기</button></div>
+  <div class="opt-row"><span>초대 링크 (방 입장)</span><button class="mini" id="inviteBtn" type="button">보내기</button></div>
+  <div class="opt-row onlyjoined"><span>대기 화면 (어둡게)</span><button class="mini" id="standbyBtn" type="button">켜기</button></div>
+  <div class="opt-row onlyjoined"><span>화면 자동 꺼짐 방지</span><span class="wakest" id="wakeSt">확인 중</span></div>
+  <div class="opt-row onlyjoined"><span>화면 꺼도 수신 유지</span><span class="wakest" id="bgSt">확인 중</span></div>
+  <div class="opt-row" id="installCard" style="display:none"><span>홈 화면에 설치</span><button class="mini" id="installBtn" type="button">설치</button></div>
+  <button class="btn btn-leave onlyjoined" id="leaveBtn2" type="button">방 나가기</button>
+  <button class="btn btn-ghost" id="exitBtn2" type="button">앱 종료</button>
+  <p class="note">갤럭시 전용 앱에서는 전원 버튼으로 화면을 꺼도 통신이 이어집니다. 방에 아무도 없으면 빈 방이 되어, 같은 코드로 누구나 다시 쓸 수 있습니다.</p>
+  <p class="ver"></p>
+  <button class="btn btn-ghost closebtn" id="setClose" type="button">닫기</button>
+</div></div>
+
 <div class="modal" id="modal"><div class="sheet"><div id="modalBody"></div><button class="btn btn-ghost closebtn" id="modalClose" type="button">닫기</button></div></div>
 
+<div id="toast"></div>
 <div id="audio-container"></div>
 
 <script>
@@ -2717,7 +2738,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-g";
+  const APP_VERSION = "2026.11.17-h";
   const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
@@ -2736,7 +2757,8 @@ var qrcode = function() {
     micOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
     vol: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
     volOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
-    moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+    moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'
   };
 
   /* ================= 상태 ================= */
@@ -2748,7 +2770,8 @@ var qrcode = function() {
   let mutedNums = {};      // 번호 -> 개별 음소거 여부
   let joined = false, code = "", myNum = 1;
   let micOn = START_MIC_ON, pttMode = false, pttHeld = false;
-  let listenMuted = false, vibrateOn = true, beepOn = false;
+  let listenMuted = false, vibrateOn = true, rogerOn = true, wakeOnRx = true;
+  let chanHeld = 0, chanPrev = 0, wasLive = false, lastSigAt = 0, rogerRx = {}, rogerBuf = null, rogerUrl = null;
   let standbyMode = false, lastRx = 0, rxActive = false, meSpeaking = false, lastMeVoice = 0;
   let levelTimer = null, healTimer = null, wakeLock = null, lastSig = "", tick = 0;
   let wakeVideo = null, wakeDraw = null;
@@ -2772,7 +2795,8 @@ var qrcode = function() {
     if (myNum < 1 || myNum > MAX_USERS) myNum = 1;
     pttMode = loadPref("ptt21", "0") === "1";   // 기본: 한 번 눌러 켜고, 다시 눌러 끄는 방식
     vibrateOn = loadPref("vib", "1") === "1";
-    beepOn = loadPref("beep", "0") === "1";
+    rogerOn = loadPref("roger", "1") === "1";
+    wakeOnRx = loadPref("wakerx", "1") === "1";
 
     const chips = $("numChips");
     for (let i = 1; i <= MAX_USERS; i++) {
@@ -2790,7 +2814,7 @@ var qrcode = function() {
     for (let i = 1; i <= MAX_USERS; i++) {
       const b = document.createElement("button");
       b.className = "mem"; b.id = "mem" + i; b.innerHTML = '<span class="n">' + i + '</span><span class="t" id="nm' + i + '"></span>';
-      b.onclick = () => openPerson(i);
+      bindMember(b, i);
       mem.appendChild(b);
     }
   })();
@@ -2822,7 +2846,7 @@ var qrcode = function() {
   }
   $("roomCode").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5);
-    stopScan(); usedNums = {}; drawChips();
+    stopScan(); usedNums = {}; drawChips(); updateCodeHint();
     if (/^\d{5}$/.test(e.target.value)) scheduleScan(600);
     else setScanText("방 코드를 입력하면 사용 중인 번호를 확인합니다");
   });
@@ -2865,7 +2889,7 @@ var qrcode = function() {
         else joinMsg("모든 번호가 사용 중입니다.", true);
       }
       drawChips();
-      setScanText(used.length ? "사용 중 " + used.length + "명: " + used.map((n) => n + "번" + (foundNames[n] ? " " + foundNames[n] : "")).join(", ") : "사용 중인 번호가 없습니다");
+      setScanText(used.length ? "사용 중 " + used.length + "명: " + used.map((n) => n + "번" + (foundNames[n] ? " " + foundNames[n] : "")).join(", ") : "아무도 없는 빈 방입니다 · 이 코드로 새로 시작할 수 있습니다");
       if (!joined) scheduleScan(15000);
     };
 
@@ -2901,20 +2925,8 @@ var qrcode = function() {
 
   function joinMsg(text, isErr) { $("joinMsg").textContent = text || ""; $("joinMsg").classList.toggle("err", !!isErr); }
 
-  /* ================= 초대 링크 ================= */
-  $("inviteBtn").onclick = async () => {
-    const c = $("roomCode").value;
-    if (!/^\d{5}$/.test(c)) { joinMsg("먼저 방 코드 5자리를 입력해 주세요.", true); return; }
-    const url = location.origin + location.pathname + "?code=" + c;
-    try {
-      if (navigator.share) { await navigator.share({ title: "현장 무전기", text: "방 코드 " + c, url }); }
-      else { await navigator.clipboard.writeText(url); joinMsg("초대 링크를 복사했습니다."); }
-    } catch (e) { joinMsg(url); }
-  };
-
   /* ================= 통신 시작 ================= */
   $("joinBtn").onclick = startRadio;
-  $("leaveBtn").onclick = () => stopRadio("통신이 종료되었습니다.");
 
   async function startRadio() {
     code = $("roomCode").value;
@@ -2942,7 +2954,7 @@ var qrcode = function() {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false
       });
     } catch (err) {
-      $("joinBtn").disabled = false;
+      updateCodeHint();
       joinMsg("마이크 권한을 허용해야 통신할 수 있습니다.", true);
       return;
     }
@@ -2958,6 +2970,10 @@ var qrcode = function() {
     applyMic();
     joinMsg("서버에 접속 중...");
 
+    createPeer(0);
+  }
+
+  function createPeer(tries) {
     peer = new Peer(`${APP_PREFIX}${code}-${myNum}`);
 
     peer.on("open", () => {
@@ -3001,8 +3017,13 @@ var qrcode = function() {
         c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 300));
         return;
       }
+      if (md.sig) {   // 임시 연결로 온 신호 (신호음 등)
+        handleSignal(n, md.sig);
+        c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 300));
+        return;
+      }
       if (n >= 1 && n <= MAX_USERS && n !== myNum) { names[n] = String(md.name || "").slice(0, 6); render(true); }
-      c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 300));
+      c.on("data", (d) => handleSignal(n, d));   // 이 연결은 닫지 않고 유지해서 신호음을 받습니다
     });
 
     peer.on("disconnected", () => {
@@ -3018,6 +3039,13 @@ var qrcode = function() {
         return;
       }
       if (err.type === "unavailable-id") {
+        if (!joined && tries < 3 && localStream) {   // 방금 나간 직후라 서버에 이전 접속이 남아 있을 수 있어 잠시 뒤 다시 시도
+          joinMsg("잠시만요, 접속을 다시 시도하는 중입니다...");
+          try { peer.destroy(); } catch (e) {}
+          peer = null;
+          setTimeout(() => { if (!joined && localStream && !peer) createPeer(tries + 1); }, 2500);
+          return;
+        }
         stopRadio(myNum + "번은 이미 다른 사람이 쓰고 있습니다. 다른 번호를 고르거나 잠시 후 다시 시도해 주세요.", true);
         return;
       }
@@ -3155,13 +3183,229 @@ var qrcode = function() {
   }
   $("whOff").onclick = () => setWhisper(0);
 
+  /* ================= 라방: 길게 눌러 그 사람에게만 말하기 ================= */
+  const HOLD_TALK_MS = 280;
+  function bindMember(b, n) {
+    let timer = null, started = false, pid = null;
+    b.addEventListener("pointerdown", (e) => {
+      if (n === myNum) return;
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch (err) {}
+      pid = e.pointerId; started = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (pid !== null && joined && Object.values(calls).some((x) => x.connected && x.num === n)) { started = true; startChanTalk(n); }
+      }, HOLD_TALK_MS);
+    });
+    const up = (e) => {
+      if (pid === null) return;
+      pid = null; clearTimeout(timer);
+      if (started) { started = false; endChanTalk(); }
+      else if (e.type === "pointerup" && n !== myNum) openPerson(n);
+    };
+    b.addEventListener("pointerup", up);
+    b.addEventListener("pointercancel", up);
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+    b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (n !== myNum) openPerson(n); } });
+  }
+
+  // 번호를 누르고 있는 동안만 마이크가 켜지고, 그 사람에게만 소리가 갑니다
+  function startChanTalk(n) {
+    if (chanHeld) return;
+    chanHeld = n; chanPrev = whisperTo;
+    if (chanPrev && chanPrev !== n) notifyWhisper(chanPrev, false);
+    if (chanPrev !== n) notifyWhisper(n, true);
+    whisperTo = n;
+    applyRouting();
+    applyMic();
+    render(true);
+  }
+  function endChanTalk() {
+    if (!chanHeld) return;
+    const n = chanHeld, back = chanPrev;
+    chanHeld = 0; chanPrev = 0;
+    applyMic();
+    if (back !== n) {
+      notifyWhisper(n, false);
+      whisperTo = back;
+      if (back) notifyWhisper(back, true);
+      applyRouting();
+    }
+    render(true);
+  }
+
+  /* ================= 라방: 무전 신호음 (띠리리릭) ================= */
+  // 말을 시작하면 신호음을 내 기기에서 한 번 울리고, 듣는 사람(귓속말이면 그 사람)에게 신호를 보내 같은 소리가 나게 합니다
+  function rogerSamples(rate) {
+    const segs = [[1000, 0.09], [0, 0.025], [1500, 0.04], [1900, 0.04], [1500, 0.04], [1900, 0.04], [1500, 0.04], [2300, 0.07]];
+    let total = 0; segs.forEach((s) => { total += Math.round(s[1] * rate); });
+    const out = new Float32Array(total); let o = 0;
+    const edge = Math.round(0.004 * rate);
+    segs.forEach((s) => {
+      const len = Math.round(s[1] * rate), f = s[0];
+      for (let i = 0; i < len; i++) {
+        let env = 1;
+        if (i < edge) env = i / edge; else if (i > len - edge) env = (len - i) / edge;
+        out[o + i] = f ? env * (0.7 * Math.sin(2 * Math.PI * f * i / rate) + 0.2 * Math.sin(2 * Math.PI * 3 * f * i / rate)) : 0;
+      }
+      o += len;
+    });
+    return out;
+  }
+  function rogerWavUrl() {
+    if (rogerUrl) return rogerUrl;
+    const rate = 16000, s = rogerSamples(rate), buf = new ArrayBuffer(44 + s.length * 2), v = new DataView(buf);
+    const w = (p, str) => { for (let i = 0; i < str.length; i++) v.setUint8(p + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + s.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, "data"); v.setUint32(40, s.length * 2, true);
+    for (let i = 0; i < s.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s[i])) * 32767, true);
+    rogerUrl = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+    return rogerUrl;
+  }
+  function playRoger(vol) {
+    try {
+      if (audioCtx && audioCtx.state !== "closed") {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        if (!rogerBuf) {
+          const d = rogerSamples(audioCtx.sampleRate);
+          rogerBuf = audioCtx.createBuffer(1, d.length, audioCtx.sampleRate);
+          rogerBuf.copyToChannel(d, 0);
+        }
+        const s = audioCtx.createBufferSource(), g = audioCtx.createGain();
+        s.buffer = rogerBuf; g.gain.value = vol;
+        s.connect(g); g.connect(audioCtx.destination); s.start();
+        return;
+      }
+    } catch (e) {}
+    try { const a = new Audio(rogerWavUrl()); a.volume = vol; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  function sendSignal(entry, obj) {
+    try { if (entry.dc && entry.dc.open) { entry.dc.send(obj); return; } } catch (e) {}
+    try {   // 예비 방법: 짧은 임시 연결로 보냄
+      if (!peer || peer.destroyed) return;
+      const dc = peer.connect(idOf(entry.num), { reliable: true, metadata: { sig: obj, num: myNum, name: myName } });
+      dc.on("open", () => setTimeout(() => { try { dc.close(); } catch (e) {} }, 400));
+      dc.on("error", () => {});
+    } catch (e) {}
+  }
+  function onTalkStart() {
+    if (!joined) return;
+    const now = Date.now();
+    if (now - lastSigAt < 500) return;
+    lastSigAt = now;
+    if (!rogerOn) return;
+    playRoger(0.35);
+    for (const id in calls) {
+      const e = calls[id];
+      if (e.connected && (!whisperTo || e.num === whisperTo)) sendSignal(e, { t: "roger", num: myNum });
+    }
+  }
+  function handleSignal(n, d) {
+    if (!joined || !d || typeof d !== "object") return;
+    if (d.t === "roger" && n >= 1 && n <= MAX_USERS && n !== myNum) {
+      if (!rogerOn || listenMuted || mutedNums[n]) return;
+      const now = Date.now();
+      if (now - (rogerRx[n] || 0) < 400) return;
+      rogerRx[n] = now;
+      playRoger(0.9);
+      nativeWake();
+    }
+  }
+
+  /* ================= 라방: 설정 / 확인창 / 나가기 / 종료 ================= */
+  function syncSettings() {
+    $("modeOpen").classList.toggle("sel", !pttMode);
+    $("modePtt").classList.toggle("sel", pttMode);
+    $("vibSw").classList.toggle("on", vibrateOn);
+    $("rogerSw").classList.toggle("on", rogerOn);
+    $("wakeSw").classList.toggle("on", wakeOnRx);
+  }
+  function openSettings() { syncSettings(); $("setModal").classList.toggle("incall", joined); $("setModal").classList.add("on"); }
+  function closeSettings() { $("setModal").classList.remove("on"); }
+  $("gearJoin").onclick = openSettings;
+  $("gearCall").onclick = openSettings;
+  $("setClose").onclick = closeSettings;
+  $("setModal").addEventListener("click", (e) => { if (e.target === $("setModal")) closeSettings(); });
+
+  let toastTimer = null;
+  function showToast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("on"), 2200); }
+
+  function confirmBox(title, text, okLabel, fn) {
+    const body = $("modalBody"); body.innerHTML = "";
+    const h = document.createElement("h3"); h.textContent = title;
+    const p = document.createElement("p"); p.textContent = text;
+    const ok = document.createElement("button"); ok.className = "btn btn-leave"; ok.type = "button"; ok.textContent = okLabel;
+    ok.onclick = () => { closeModal(); fn(); };
+    body.append(h, p, ok);
+    $("modal").classList.add("on");
+  }
+  function leaveRoom() {
+    closeSettings();
+    confirmBox("방에서 나갈까요?", "접속 화면으로 돌아갑니다. 방에 아무도 없게 되면 빈 방이 되어, 누구든 같은 코드로 다시 사용할 수 있습니다.",
+      "방 나가기", () => stopRadio("방에서 나왔습니다. 같은 코드로 언제든 다시 들어올 수 있습니다."));
+  }
+  $("leaveBtn").onclick = leaveRoom;
+  $("leaveBtn2").onclick = leaveRoom;
+
+  function doExit() {
+    if (joined) stopRadio("");
+    if (IS_NATIVE) { try { AndroidKeeper.exit(); return; } catch (e) {} }
+    try { window.close(); } catch (e) {}
+    setTimeout(() => openInfo("라방을 닫아 주세요", isIOS
+      ? "통신은 종료되었습니다. 홈 화면으로 나간 뒤, 화면 아래에서 위로 쓸어 올려 라방을 닫아 주세요."
+      : "통신은 종료되었습니다. 브라우저 탭을 닫거나, 최근 앱 목록에서 라방을 위로 밀어 닫아 주세요."), 300);
+  }
+  function exitApp() {
+    closeSettings();
+    confirmBox("앱을 종료할까요?", joined ? "방에서 나가고 라방을 완전히 닫습니다." : "라방을 완전히 닫습니다.", "앱 종료", doExit);
+  }
+  $("exitBtn1").onclick = exitApp;
+  $("exitBtn2").onclick = exitApp;
+
+  function updateCodeHint() {
+    const v = $("roomCode").value, ok = /^\d{5}$/.test(v), el = $("codeHint");
+    el.textContent = ok ? "✓ 사용할 수 있는 방 코드입니다" : (v.length ? "숫자 5자리를 모두 입력해 주세요 (" + v.length + "/5)" : "숫자 5자리를 입력해 주세요");
+    el.classList.toggle("ok", ok);
+    if (!joined) $("joinBtn").disabled = !ok;
+  }
+
+  const installBase = () => location.origin + location.pathname.replace(/[^\/]*$/, "");
+  $("inviteBtn").onclick = async () => {
+    const c = joined ? code : $("roomCode").value;
+    closeSettings();
+    if (!/^\d{5}$/.test(c)) { joinMsg("먼저 방 코드 5자리를 입력해 주세요.", true); return; }
+    const url = location.origin + location.pathname + "?code=" + c;
+    const text = "라방 방 코드 " + c + " · 아래 링크를 누르면 바로 입장합니다";
+    if (IS_NATIVE && AndroidKeeper.share) { try { AndroidKeeper.share(text + "\n" + url); return; } catch (e) {} }
+    try { if (navigator.share) { await navigator.share({ title: "라방", text, url }); return; } }
+    catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(url); showToast("초대 링크를 복사했습니다"); }
+    catch (e) { openInfo("초대 링크", url); }
+  };
+  $("qrBtn2").onclick = () => { closeSettings(); showQR(); };
+
+  $("modeOpen").onclick = () => { pttMode = false; micOn = false; pttHeld = false; savePref("ptt21", "0"); applyMic(); syncSettings(); render(true); };
+  $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt21", "1"); applyMic(); syncSettings(); render(true); };
+  $("vibSw").onclick = () => { vibrateOn = !vibrateOn; savePref("vib", vibrateOn ? "1" : "0"); syncSettings(); render(true); };
+  $("rogerSw").onclick = () => { rogerOn = !rogerOn; savePref("roger", rogerOn ? "1" : "0"); syncSettings(); render(true); if (rogerOn) playRoger(0.5); };
+  $("wakeSw").onclick = () => { wakeOnRx = !wakeOnRx; savePref("wakerx", wakeOnRx ? "1" : "0"); syncSettings(); };
+
+
   // 연결된 상대에게 내 번호와 이름을 알려 줍니다 (상대 화면의 번호 아래에 표시됨)
   function sendHello(num) {
     try {
       if (!peer || peer.destroyed) return;
+      const entry = calls[idOf(num)];
       const dc = peer.connect(idOf(num), { reliable: true, metadata: { name: myName, num: myNum } });
-      dc.on("open", () => setTimeout(() => { try { dc.close(); } catch (e) {} }, 500));
       dc.on("error", () => {});
+      if (entry) {   // 이 연결을 유지해 두고 신호음을 보낼 때 씁니다
+        entry.dc = dc;
+        dc.on("close", () => { if (entry.dc === dc) entry.dc = null; });
+      } else {
+        dc.on("open", () => setTimeout(() => { try { dc.close(); } catch (e) {} }, 500));
+      }
     } catch (e) {}
   }
 
@@ -3180,6 +3424,7 @@ var qrcode = function() {
     delete whispersFrom[entry.num];
     if (entry.audioEl) { entry.audioEl.srcObject = null; entry.audioEl.remove(); }
     if (entry.source) { try { entry.source.disconnect(); } catch (e) {} }
+    if (entry.dc) { try { entry.dc.close(); } catch (e) {} entry.dc = null; }
     try { entry.call.close(); } catch (e) {}
     render(true);
   }
@@ -3238,22 +3483,18 @@ var qrcode = function() {
 
   function alertRx() {
     if (vibrateOn && navigator.vibrate) { try { navigator.vibrate([150, 80, 150]); } catch (e) {} }
-    if (beepOn && audioCtx) {
-      try {
-        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.frequency.value = 880; g.gain.value = 0.15;
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start(); o.stop(audioCtx.currentTime + 0.12);
-      } catch (e) {}
-    }
+    nativeWake();
   }
 
   /* ================= 마이크 / 음소거 ================= */
-  const micLive = () => pttMode ? pttHeld : micOn;
+  const micLive = () => chanHeld ? true : (pttMode ? pttHeld : micOn);
   function applyMic() {
     if (!localStream) return;
     const t = localStream.getAudioTracks()[0];
-    if (t) t.enabled = micLive();
+    const live = micLive();
+    if (t) t.enabled = live;
+    if (live && !wasLive) onTalkStart();   // 말을 시작하는 순간: 신호음
+    wasLive = live;
   }
 
   const micBtn = $("micBtn");
@@ -3269,8 +3510,6 @@ var qrcode = function() {
   micBtn.addEventListener("pointercancel", pttUp);
   micBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  $("modeOpen").onclick = () => { pttMode = false; micOn = true; pttHeld = false; savePref("ptt21", "0"); applyMic(); render(true); };
-  $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt21", "1"); applyMic(); render(true); };
 
   // 전체 수신 음소거
   $("listenBtn").onclick = () => { listenMuted = !listenMuted; applyListen(); render(true); };
@@ -3287,14 +3526,11 @@ var qrcode = function() {
     }
   }
 
-  $("vibSw").onclick = () => { vibrateOn = !vibrateOn; savePref("vib", vibrateOn ? "1" : "0"); render(true); };
-  $("beepSw").onclick = () => { beepOn = !beepOn; savePref("beep", beepOn ? "1" : "0"); render(true); };
 
   /* ================= 대기 화면 / 화면 꺼짐 방지 ================= */
   $("standbyBtn").onclick = () => {
-    standbyMode = !standbyMode;
-    lastRx = 0;
-    if (standbyMode) { drawClock(); $("standby").classList.add("on"); } else $("standby").classList.remove("on");
+    closeSettings();
+    standbyMode = true; lastRx = 0; drawClock(); $("standby").classList.add("on");
     render(true);
   };
   $("standby").onclick = () => { standbyMode = false; $("standby").classList.remove("on"); render(true); };
@@ -3366,7 +3602,8 @@ var qrcode = function() {
     return new Blob([buf], { type: "audio/wav" });
   }
 
-  function nativeStart() { try { if (IS_NATIVE) AndroidKeeper.start("현장 무전기", "방 " + code + " · " + myNum + "번 통신 중"); } catch (e) {} }
+  function nativeStart() { try { if (IS_NATIVE) AndroidKeeper.start("라방", "방 " + code + " · " + myNum + "번 통신 중"); } catch (e) {} }
+  function nativeWake() { try { if (IS_NATIVE && wakeOnRx && AndroidKeeper.wake) AndroidKeeper.wake(); } catch (e) {} }
   function nativeStop() { try { if (IS_NATIVE) AndroidKeeper.stop(); } catch (e) {} }
 
   function bgStatus(t, ok) { const el = $("bgSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }
@@ -3406,7 +3643,7 @@ var qrcode = function() {
       if (key === lastMS) return;
       lastMS = key;
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: "현장 무전기 · 방 " + code + " · " + myNum + "번",
+        title: "라방 · 방 " + code + " · " + myNum + "번",
         artist: state,
         album: "재생/일시정지 버튼 = 마이크 켜기/끄기",
         artwork: [{ src: "icon-512.png", sizes: "512x512", type: "image/png" }]
@@ -3454,6 +3691,7 @@ var qrcode = function() {
   }
   $("updBtn").onclick = applyUpdate;
   document.addEventListener("visibilitychange", () => {
+    if (document.hidden) endChanTalk();
     if (!document.hidden) checkUpdate();
     if (joined && keepAudio && keepAudio.paused) keepAudio.play().catch(() => {});
     if (!document.hidden && joined) {
@@ -3474,7 +3712,7 @@ var qrcode = function() {
     talkers.sort((a, b) => a - b); live.sort((a, b) => a - b);
     if (whisperTo && !live.includes(whisperTo)) { whisperTo = 0; applyRouting(); }   // 귓속말 상대가 나가면 자동 해제
     const sig = [talkers.join(), live.join(), meSpeaking, micLive(), pttMode, listenMuted, standbyMode,
-                 vibrateOn, beepOn, JSON.stringify(mutedNums), JSON.stringify(names), myName, JSON.stringify(whispersFrom), whisperTo].join("|");
+                 vibrateOn, rogerOn, chanHeld, JSON.stringify(mutedNums), JSON.stringify(names), myName, JSON.stringify(whispersFrom), whisperTo].join("|");
     if (!force && sig === lastSig) return;
     lastSig = sig;
 
@@ -3501,7 +3739,7 @@ var qrcode = function() {
     for (let i = 1; i <= MAX_USERS; i++) {
       const isMe = i === myNum, isLive = live.includes(i), isTalk = isMe ? meSpeaking : talkers.includes(i);
       const cut = !isMe && !!mutedNums[i];
-      $("mem" + i).className = "mem" + (isMe ? " me" : "") + (isLive ? " live" : "") + (isTalk && !cut ? " talk" : "") + (cut ? " cut" : "") + (whispersFrom[i] ? " wh" : "") + (whisperTo === i ? " wto" : "");
+      $("mem" + i).className = "mem" + (isMe ? " me" : "") + (isLive ? " live" : "") + (isTalk && !cut ? " talk" : "") + (cut ? " cut" : "") + (whispersFrom[i] ? " wh" : "") + (whisperTo === i ? " wto" : "") + (chanHeld === i ? " hold" : "");
       const label = isMe ? (myName || "나") : (isLive ? (names[i] || "") : "");
       setName($("nm" + i), label);
       $("mem" + i).classList.toggle("hasname", !!label);
@@ -3520,17 +3758,14 @@ var qrcode = function() {
     ml.className = on ? "live" : (offState ? "off" : "");
     ml.textContent = pttMode ? (on ? "말하는 중..." : "누르고 말하기") : (on ? "마이크 켜짐 · 눌러서 끄기" : "마이크 꺼짐 · 눌러서 켜기");
     if (whisperTo) ml.textContent = on ? "귓속말 중" : (pttMode ? "누르고 귓속말" : "마이크 꺼짐 · 눌러서 켜기");
+    if (chanHeld) ml.textContent = (shortName(names[chanHeld]) || chanHeld + "번") + "님에게만 말하는 중";
     $("whBar").style.display = whisperTo ? "flex" : "none";
     if (whisperTo) $("whText").textContent = (shortName(names[whisperTo]) || whisperTo + "번") + "님에게만 말하는 중 (귓속말)";
 
-    const sb = $("standbyBtn");
-    sb.className = "side" + (standbyMode ? " active" : "");
-    sb.innerHTML = `<span class="circle">${svg(IC.moon)}</span><span>대기 화면</span>`;
-
-    $("modeOpen").classList.toggle("sel", !pttMode);
-    $("modePtt").classList.toggle("sel", pttMode);
-    $("vibSw").classList.toggle("on", vibrateOn);
-    $("beepSw").classList.toggle("on", beepOn);
+    const lv = $("leaveBtn");
+    lv.className = "side";
+    lv.innerHTML = `<span class="circle">${svg(IC.leave)}</span><span>방 나가기</span>`;
+    syncSettings();
     updateMediaSession();
   }
 
@@ -3540,6 +3775,7 @@ var qrcode = function() {
     clearInterval(levelTimer); clearInterval(healTimer);
     Object.values(calls).forEach(drop);
     calls = {}; lostAt = {}; names = {}; whisperTo = 0; whispersFrom = {};
+    chanHeld = 0; chanPrev = 0; wasLive = false; rogerRx = {}; rogerBuf = null;
     if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
@@ -3550,7 +3786,7 @@ var qrcode = function() {
     $("audio-container").innerHTML = "";
     $("callScreen").classList.remove("on");
     $("joinScreen").classList.add("on");
-    $("joinBtn").disabled = false;
+    updateCodeHint();
     joinMsg(message || "", isErr);
     usedNums = {}; drawChips();
     if (/^\d{5}$/.test($("roomCode").value)) scheduleScan(1500);
@@ -3574,8 +3810,8 @@ var qrcode = function() {
 
   function showQR() {
     const c = joined ? code : $("roomCode").value;
-    if (!/^\d{5}$/.test(c)) { joinMsg("먼저 방 코드 5자리를 입력해 주세요.", true); return; }
-    const url = location.origin + location.pathname + "?code=" + c;
+    const valid = /^\d{5}$/.test(c);
+    const url = installBase() + (valid ? "?code=" + c : "");
     let svg = "";
     try {
       const qr = qrcode(0, "M"); qr.addData(url); qr.make();
@@ -3585,9 +3821,9 @@ var qrcode = function() {
       svg = '<svg viewBox="0 0 ' + (n + 2 * m) + " " + (n + 2 * m) + '" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
     } catch (e) {}
     const body = $("modalBody"); body.innerHTML = "";
-    const h = document.createElement("h3"); h.textContent = "방 " + c + " 초대 QR코드";
+    const h = document.createElement("h3"); h.textContent = valid ? "라방 설치 QR · 방 " + c : "라방 설치 QR";
     const box = document.createElement("div"); box.className = "qrbox"; box.innerHTML = svg || "QR코드를 만들지 못했습니다";
-    const p = document.createElement("p"); p.textContent = "다른 사람이 휴대폰 카메라로 비추면 이 방의 접속 화면이 바로 열립니다";
+    const p = document.createElement("p"); p.textContent = "휴대폰 카메라로 비추면 라방 설치 안내가 열립니다" + (valid ? ". 설치한 뒤 방 코드 " + c + " 를 입력하면 됩니다." : ".");
     const u = document.createElement("p"); u.className = "url"; u.textContent = url;
     body.append(h, box, p, u);
     $("modal").classList.add("on");
@@ -3631,8 +3867,6 @@ var qrcode = function() {
     $("modal").classList.add("on");
   }
 
-  $("qrBtn").onclick = showQR;
-  $("qrBtn2").onclick = showQR;
   $("installBtn").onclick = async () => {
     if (deferredPrompt) {
       try { deferredPrompt.prompt(); await deferredPrompt.userChoice; } catch (e) {}
@@ -3655,6 +3889,8 @@ var qrcode = function() {
   }
 
   /* ================= 시작할 때 ================= */
+  if (IS_NATIVE) document.body.classList.add("native");
+  updateCodeHint();
   if (!isStandalone() && !IS_NATIVE) $("installCard").style.display = "flex";
   if (new URLSearchParams(location.search).get("install") === "1" && isIOS && !isStandalone()) setTimeout(showGuide, 700);   // 설치 안내 페이지에서 넘어온 아이폰
   if (isInApp && !IS_NATIVE) $("inappCard").style.display = "flex";

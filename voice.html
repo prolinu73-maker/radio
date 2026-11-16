@@ -2717,7 +2717,8 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-f";   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
+  const APP_VERSION = "2026.11.17-g";
+  const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
   const START_MIC_ON = false;     // 통신을 시작할 때 마이크를 켜 둘지 (false: 꺼진 상태로 시작, true: 켜진 상태로 시작)
@@ -2946,6 +2947,7 @@ var qrcode = function() {
       return;
     }
 
+    nativeStart();   // 앱에서는 마이크 서비스를 켜서 화면이 꺼져도 통신 유지
     if (audioCtx) {
       localSource = audioCtx.createMediaStreamSource(localStream);
       localAnalyser = audioCtx.createAnalyser(); localAnalyser.fftSize = 512;
@@ -3305,6 +3307,7 @@ var qrcode = function() {
   function wakeStatus(t, ok) { const el = $("wakeSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }
 
   async function acquireWake() {
+    if (IS_NATIVE) { wakeStatus("앱이 유지합니다", true); return; }
     if (document.hidden) return;
     if (wakeLock && !wakeLock.released) { wakeStatus("작동 중", true); return; }
     if (wakeVideo && !wakeVideo.paused) return;
@@ -3363,9 +3366,13 @@ var qrcode = function() {
     return new Blob([buf], { type: "audio/wav" });
   }
 
+  function nativeStart() { try { if (IS_NATIVE) AndroidKeeper.start("현장 무전기", "방 " + code + " · " + myNum + "번 통신 중"); } catch (e) {} }
+  function nativeStop() { try { if (IS_NATIVE) AndroidKeeper.stop(); } catch (e) {} }
+
   function bgStatus(t, ok) { const el = $("bgSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }
 
   function startKeepAlive() {
+    if (IS_NATIVE) { bgStatus("앱이 유지합니다", true); return; }
     try {
       if (!keepAudio) {
         keepUrl = URL.createObjectURL(makeSilentWav());
@@ -3392,7 +3399,7 @@ var qrcode = function() {
   }
 
   function updateMediaSession() {
-    if (!joined || !("mediaSession" in navigator)) return;
+    if (!joined || IS_NATIVE || !("mediaSession" in navigator)) return;
     try {
       const state = pttMode ? "누르고 말하기 방식" : (micOn ? "마이크 켜짐" : "마이크 꺼짐");
       const key = code + "|" + myNum + "|" + state;
@@ -3537,7 +3544,7 @@ var qrcode = function() {
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
     localAnalyser = null; localSource = null;
-    stopWake(); stopKeepAlive();
+    stopWake(); stopKeepAlive(); nativeStop();
     standbyMode = false; rxActive = false; meSpeaking = false; lastRx = 0; lastSig = "";
     $("standby").classList.remove("on");
     $("audio-container").innerHTML = "";
@@ -3648,9 +3655,9 @@ var qrcode = function() {
   }
 
   /* ================= 시작할 때 ================= */
-  if (!isStandalone()) $("installCard").style.display = "flex";
+  if (!isStandalone() && !IS_NATIVE) $("installCard").style.display = "flex";
   if (new URLSearchParams(location.search).get("install") === "1" && isIOS && !isStandalone()) setTimeout(showGuide, 700);   // 설치 안내 페이지에서 넘어온 아이폰
-  if (isInApp) $("inappCard").style.display = "flex";
+  if (isInApp && !IS_NATIVE) $("inappCard").style.display = "flex";
   if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
   document.querySelectorAll(".ver").forEach((e) => { e.textContent = "버전 " + APP_VERSION; });
   if (/^\d{5}$/.test($("roomCode").value)) scheduleScan(800);

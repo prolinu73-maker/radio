@@ -487,6 +487,7 @@
   <div class="opt-row onlyjoined"><span>대기 화면 (어둡게)</span><button class="mini" id="standbyBtn" type="button">켜기</button></div>
   <div class="opt-row onlyjoined"><span>화면 자동 꺼짐 방지</span><span class="wakest" id="wakeSt">확인 중</span></div>
   <div class="opt-row onlyjoined"><span>화면 꺼도 수신 유지</span><span class="wakest" id="bgSt">확인 중</span></div>
+  <div class="opt-row"><span>앱 업데이트 <small id="updVer" style="display:block;font-size:12px;color:var(--sub);font-weight:500"></small></span><button class="mini" id="updNowBtn" type="button">업데이트</button></div>
   <div class="opt-row" id="installCard" style="display:none"><span>홈 화면에 설치</span><button class="mini" id="installBtn" type="button">설치</button></div>
   <button class="btn btn-leave onlyjoined" id="leaveBtn2" type="button">방 나가기</button>
   <button class="btn btn-ghost" id="exitBtn2" type="button">앱 종료</button>
@@ -2802,7 +2803,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-k";
+  const APP_VERSION = "2026.11.17-l";
   const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
@@ -3492,6 +3493,7 @@ var qrcode = function() {
   $("themeLight").onclick = () => { savePref("theme", "light"); applyTheme(true); };
   $("themeDark").onclick = () => { savePref("theme", "dark"); applyTheme(false); };
   function syncSettings() {
+    $("updVer").textContent = "버전 " + APP_VERSION + (remoteVer && remoteVer !== APP_VERSION ? " → 새 버전 " + remoteVer : "");
     applyTheme(document.documentElement.classList.contains("light"));
     $("modeOpen").classList.toggle("sel", !pttMode);
     $("modePtt").classList.toggle("sel", pttMode);
@@ -3869,6 +3871,27 @@ var qrcode = function() {
     location.replace(location.pathname + "?" + (/^\d{5}$/.test(c) ? "code=" + c + "&" : "") + "v=" + (remoteVer || Date.now()));
   }
   $("updBtn").onclick = applyUpdate;
+  // 설정의 [업데이트] 버튼: 새 버전이 있는지 바로 확인하고, 있으면 최신으로 바꿉니다
+  async function manualUpdate() {
+    const btn = $("updNowBtn");
+    if (!/^https?:/.test(location.protocol)) { showToast("인터넷 주소로 열었을 때만 업데이트할 수 있습니다"); return; }
+    btn.disabled = true; btn.textContent = "확인 중...";
+    let ver = null, failed = false;
+    try {
+      const r = await fetch(location.pathname + "?nocache=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) failed = true;
+      else { const m = new RegExp('APP_VERSION = "([0-9a-z.-]+)"').exec(await r.text()); if (m) ver = m[1]; else failed = true; }
+    } catch (e) { failed = true; }
+    btn.disabled = false; btn.textContent = "업데이트";
+    if (failed) { showToast("확인하지 못했습니다. 인터넷 연결을 확인해 주세요"); return; }
+    if (ver === APP_VERSION) { $("updVer").textContent = "버전 " + APP_VERSION + " · 최신입니다"; showToast("이미 최신 버전입니다"); return; }
+    remoteVer = ver;
+    try { if (navigator.serviceWorker) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) reg.update().catch(() => {}); } } catch (e) {}
+    closeSettings();
+    if (joined) confirmBox("새 버전으로 업데이트할까요?", "새 버전(" + ver + ")이 있습니다. 업데이트하면 방에서 잠시 나가게 되며, 끝난 뒤 [방 들어가기]를 다시 눌러 주세요.", "업데이트", () => { stopRadio(""); applyUpdate(); });
+    else applyUpdate();
+  }
+  $("updNowBtn").onclick = manualUpdate;
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) endChanTalk();
     if (!document.hidden) checkUpdate();

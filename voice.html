@@ -111,6 +111,13 @@
     /* ---------- 통신 화면 ---------- */
     .topbar { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px; }
     .topbar .room { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+    .topbar .room span { display: inline-block; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+    .roomlist { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    .roomitem { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); background: rgba(255,255,255,.03); color: inherit; border-radius: 12px; padding: 11px 14px; font-size: 15px; }
+    .roomitem b { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .roomitem span { flex: none; font-size: 12.5px; color: var(--sub); }
+    .roomitem.sel { border-color: var(--primary); }
+    .roomnote { font-size: 12px; color: var(--sub); line-height: 1.5; margin: 6px 0 0; }
     .topbar .room small { font-weight: 600; color: var(--primary); margin-left: 8px; font-size: 14px; }
     .conn {
       font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 7px;
@@ -356,12 +363,21 @@
     <input type="text" id="roomCode" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="00000" value="12345">
     <p class="codehint" id="codeHint"></p>
     <div class="gap"></div>
+    <p class="label">방 이름 · 새 방을 만들 때 정하면 방 코드와 함께 표시됩니다 (선택)</p>
+    <input type="text" class="field" id="roomName" maxlength="12" autocomplete="off" placeholder="예: 행사 본부">
+    <div class="gap"></div>
     <p class="label">내 이름 · 번호 원 안에 성을 뺀 이름으로 보입니다 (선택)</p>
     <input type="text" class="field" id="userName" maxlength="6" autocomplete="off" placeholder="예: 김철수">
     <div class="gap"></div>
     <p class="label">내 번호 · 사람마다 다른 번호를 고르세요</p>
     <div class="chips" id="numChips"></div>
     <div class="chipnote"><span id="scanText">방 코드를 입력하면 사용 중인 번호를 확인합니다</span><button id="rescanBtn" type="button">다시 확인</button></div>
+  </div>
+
+  <div class="card" id="roomsCard">
+    <div class="chipnote" style="margin-top:0;margin-bottom:8px"><b style="font-size:14px;color:inherit">열린 방 목록</b><button id="roomsBtn" type="button">새로고침</button></div>
+    <div class="roomlist" id="roomList"></div>
+    <p class="roomnote" id="roomsNote">불러오는 중...</p>
   </div>
 
   <button class="btn btn-primary" id="joinBtn">방 들어가기</button>
@@ -2738,7 +2754,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-i";
+  const APP_VERSION = "2026.11.17-j";
   const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
@@ -2776,7 +2792,9 @@ var qrcode = function() {
   let levelTimer = null, healTimer = null, wakeLock = null, lastSig = "", tick = 0;
   let wakeVideo = null, wakeDraw = null;
   let scanPeer = null, scanTimer = null, scanBusy = false, scanToken = 0, usedNums = {}, usedNames = {};
-  let names = {}, myName = "";
+  let names = {}, myName = "", roomName = "";
+  const REG_ID = APP_PREFIX + "registry";
+  let regPeer = null, regRooms = {}, regTimer = null, roomsPeer = null, roomsBusy = false, roomsToken = 0, roomsTimer = null;
   let whisperTo = 0, whispersFrom = {};
   let keepAudio = null, keepUrl = null, lastMS = "";
   let lastUpdCheck = 0, remoteVer = null;
@@ -2847,6 +2865,7 @@ var qrcode = function() {
   $("roomCode").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5);
     stopScan(); usedNums = {}; drawChips(); updateCodeHint();
+    $("roomName").readOnly = false;
     if (/^\d{5}$/.test(e.target.value)) scheduleScan(600);
     else setScanText("방 코드를 입력하면 사용 중인 번호를 확인합니다");
   });
@@ -2869,7 +2888,7 @@ var qrcode = function() {
     scanBusy = true;
     const token = ++scanToken;
     setScanText("사용 중인 번호 확인 중...");
-    const found = {}, done = {}, foundNames = {};
+    const found = {}, done = {}, foundNames = {}; let foundRoom = "";
     let p;
     try { p = new Peer(); } catch (e) { scanBusy = false; return; }
     scanPeer = p;
@@ -2881,6 +2900,8 @@ var qrcode = function() {
       if (scanPeer === p) scanPeer = null;
       if (failed) { setScanText("사용 중인 번호를 확인하지 못했습니다"); scheduleScan(20000); return; }
       usedNums = found; usedNames = foundNames;
+      if (foundRoom) { $("roomName").value = foundRoom; $("roomName").readOnly = true; }
+      else $("roomName").readOnly = false;
       const used = Object.keys(found).map(Number).sort((a, b) => a - b);
       if (usedNums[myNum]) {
         let free = 0;
@@ -2910,7 +2931,7 @@ var qrcode = function() {
           try {
             const conn = p.connect(APP_PREFIX + c + "-" + i, { reliable: true, metadata: { probe: true } });
             conn.on("open", () => { found[i] = true; done[i] = true; setTimeout(() => { try { conn.close(); } catch (e) {} }, 2000); });
-            conn.on("data", (d) => { if (d && d.name !== undefined) foundNames[i] = String(d.name).slice(0, 6); });
+            conn.on("data", (d) => { if (d && d.name !== undefined) foundNames[i] = String(d.name).slice(0, 6); if (d && d.room) foundRoom = String(d.room).slice(0, 12); });
             conn.on("error", () => { done[i] = true; });
           } catch (e) { done[i] = true; }
         }, 120 * (i - 1));
@@ -2922,6 +2943,97 @@ var qrcode = function() {
       }, 250);
     });
   }
+
+  /* ================= 라방: 방 이름 / 열린 방 목록 ================= */
+  // 별도 서버 없이: 방에 들어와 있는 사람 중 한 명이 "방 목록 담당"(고정 주소)이 되고,
+  // 방 안의 사람들은 15초마다 (방 코드, 방 이름, 인원)을 알려 줍니다. 담당이 나가면 다른 사람이 이어받습니다.
+  function adoptRoom(n, r) {
+    r = String(r || "").trim().slice(0, 12);
+    if (!r || r === roomName) return;
+    if (!roomName || n < myNum) { roomName = r; render(true); }
+  }
+  function liveCount() { return Object.values(calls).filter((e) => e.connected).length + 1; }
+  function roomsArray() {
+    const now = Date.now(), out = [];
+    for (const c in regRooms) { if (now - regRooms[c].ts > 45000) delete regRooms[c]; else out.push({ code: c, name: regRooms[c].name, n: regRooms[c].n }); }
+    return out.sort((a, b) => (a.code < b.code ? -1 : 1));
+  }
+  function reportRoom() {
+    if (!joined || !peer || peer.destroyed) return;
+    const info = { code, name: roomName, n: liveCount() };
+    if (regPeer) { regRooms[code] = { name: info.name, n: info.n, ts: Date.now() }; return; }
+    try {
+      const c = peer.connect(REG_ID, { reliable: true, metadata: { reg: info } });
+      c.on("error", () => {});
+      c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 800));
+    } catch (e) {}
+  }
+  function becomeRegistry() {
+    if (regPeer || !joined || typeof Peer === "undefined") return;
+    let p;
+    try { p = new Peer(REG_ID); } catch (e) { return; }
+    p.on("open", () => { if (!joined) { try { p.destroy(); } catch (e) {} return; } regPeer = p; regRooms = {}; reportRoom(); });
+    p.on("connection", (c) => {
+      const md = c.metadata || {};
+      if (md.reg && /^\d{5}$/.test(String(md.reg.code))) regRooms[md.reg.code] = { name: String(md.reg.name || "").slice(0, 12), n: parseInt(md.reg.n, 10) || 1, ts: Date.now() };
+      c.on("open", () => {
+        if (md.list) { try { c.send({ t: "rooms", rooms: roomsArray() }); } catch (e) {} }
+        setTimeout(() => { try { c.close(); } catch (e) {} }, 1500);
+      });
+    });
+    const gone = () => { if (regPeer === p) regPeer = null; try { p.destroy(); } catch (e) {} };
+    p.on("error", gone); p.on("close", () => { if (regPeer === p) regPeer = null; });
+  }
+
+  function stopRooms() {
+    roomsToken++; clearTimeout(roomsTimer); roomsBusy = false;
+    if (roomsPeer) { try { roomsPeer.destroy(); } catch (e) {} roomsPeer = null; }
+  }
+  function drawRooms(list, failed) {
+    const box = $("roomList"); box.innerHTML = "";
+    const cur = $("roomCode").value;
+    list.forEach((r) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "roomitem" + (r.code === cur ? " sel" : "");
+      const t = document.createElement("b"); t.textContent = r.name || "이름 없는 방";
+      const m = document.createElement("span"); m.textContent = r.code + " · " + r.n + "명";
+      b.appendChild(t); b.appendChild(m);
+      b.onclick = () => {
+        $("roomCode").value = r.code; $("roomName").value = r.name || ""; $("roomName").readOnly = !!r.name;
+        updateCodeHint(); stopScan(); scheduleScan(200); drawRooms(list, false);
+      };
+      box.appendChild(b);
+    });
+    $("roomsNote").textContent = failed ? "방 목록을 불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요." : (list.length ? "방을 누르면 방 코드가 자동으로 입력됩니다." : "지금 열려 있는 방이 없습니다. 새 방 코드를 입력해 만들어 보세요.");
+  }
+  function fetchRooms() {
+    clearTimeout(roomsTimer);
+    if (joined || typeof Peer === "undefined" || roomsBusy) return;
+    roomsBusy = true;
+    const token = ++roomsToken;
+    $("roomsNote").textContent = "불러오는 중...";
+    let p, got = false;
+    try { p = new Peer(); } catch (e) { roomsBusy = false; return; }
+    roomsPeer = p;
+    const finish = (failed) => {
+      if (token !== roomsToken) return;
+      roomsBusy = false;
+      try { p.destroy(); } catch (e) {}
+      if (roomsPeer === p) roomsPeer = null;
+      if (!got) drawRooms([], failed);
+      if (!joined) roomsTimer = setTimeout(fetchRooms, 15000);
+    };
+    p.on("error", (err) => { if (err.type === "peer-unavailable") finish(false); else finish(true); });
+    p.on("open", () => {
+      try {
+        const c = p.connect(REG_ID, { reliable: true, metadata: { list: 1 } });
+        c.on("data", (d) => { if (d && d.t === "rooms" && Array.isArray(d.rooms)) { got = true; drawRooms(d.rooms.slice(0, 30), false); finish(false); } });
+        c.on("error", () => {});
+      } catch (e) { finish(true); }
+      setTimeout(() => finish(false), 8000);
+    });
+  }
+  $("roomsBtn").onclick = () => { stopRooms(); fetchRooms(); };
+  setTimeout(fetchRooms, 900);
 
   function joinMsg(text, isErr) { $("joinMsg").textContent = text || ""; $("joinMsg").classList.toggle("err", !!isErr); }
 
@@ -2937,7 +3049,8 @@ var qrcode = function() {
     }
     savePref("code", code);
     myName = $("userName").value.trim().slice(0, 6); savePref("name", myName);
-    stopScan();
+    roomName = $("roomName").value.trim().slice(0, 12);
+    stopScan(); stopRooms();
     acquireWake();   // 화면 꺼짐 방지는 버튼을 누른 직후에 요청해야 잘 됩니다
     startKeepAlive();
     $("joinBtn").disabled = true;
@@ -2981,7 +3094,8 @@ var qrcode = function() {
         joined = true;
         $("joinScreen").classList.remove("on");
         $("callScreen").classList.add("on");
-        $("roomLabel").textContent = "방 " + code;
+        $("roomLabel").textContent = roomName ? roomName + " · " + code : "방 " + code;
+        regTimer = setInterval(reportRoom, 15000); setTimeout(reportRoom, 3000); setTimeout(reportRoom, 9000);
         $("meLabel").textContent = myNum + "번";
         window.scrollTo(0, 0);
         levelTimer = setInterval(levelLoop, 100);
@@ -3006,7 +3120,7 @@ var qrcode = function() {
       const md = c.metadata || {};
       if (md.probe) {   // 접속 화면에서 "누가 쓰는지" 묻는 신호: 내 번호와 이름을 알려 주고 닫습니다
         c.on("open", () => {
-          try { c.send({ t: "hello", name: myName, num: myNum }); } catch (e) {}
+          try { c.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {}
           setTimeout(() => { try { c.close(); } catch (e) {} }, 1500);
         });
         return;
@@ -3022,7 +3136,7 @@ var qrcode = function() {
         c.on("open", () => setTimeout(() => { try { c.close(); } catch (e) {} }, 300));
         return;
       }
-      if (n >= 1 && n <= MAX_USERS && n !== myNum) { names[n] = String(md.name || "").slice(0, 6); render(true); }
+      if (n >= 1 && n <= MAX_USERS && n !== myNum) { names[n] = String(md.name || "").slice(0, 6); adoptRoom(n, md.room); render(true); }
       c.on("data", (d) => handleSignal(n, d));   // 이 연결은 닫지 않고 유지해서 신호음을 받습니다
     });
 
@@ -3032,6 +3146,7 @@ var qrcode = function() {
     });
 
     peer.on("error", (err) => {
+      if (err.type === "peer-unavailable" && (err.message || "").indexOf(REG_ID) >= 0) { becomeRegistry(); return; }
       if (err.type === "peer-unavailable") {
         // 상대가 아직 안 들어온 경우: 정상. 걸어 둔 연결만 정리
         const m = /peer (\S+)/.exec(err.message || "");
@@ -3111,8 +3226,8 @@ var qrcode = function() {
       delete lostAt[num];
       if (call.peerConnection) limitBitrate(call.peerConnection);
       sendHello(num);
-      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} } }, 2500);
-      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} } }, 8000);
+      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {} } }, 2500);
+      setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {} } }, 8000);
       applyRouting();
 
       const audioEl = document.createElement("audio");
@@ -3166,7 +3281,7 @@ var qrcode = function() {
   function notifyWhisper(num, on) {
     try {
       if (!peer || peer.destroyed) return;
-      const dc = peer.connect(idOf(num), { reliable: true, metadata: { whisper: on ? 1 : 0, num: myNum, name: myName } });
+      const dc = peer.connect(idOf(num), { reliable: true, metadata: { whisper: on ? 1 : 0, num: myNum, name: myName, room: roomName } });
       dc.on("open", () => setTimeout(() => { try { dc.close(); } catch (e) {} }, 500));
       dc.on("error", () => {});
     } catch (e) {}
@@ -3307,7 +3422,7 @@ var qrcode = function() {
   function handleSignal(n, d) {
     if (!joined || !d || typeof d !== "object") return;
     if (d.t === "hello") {   // 상대가 데이터 연결로 알려 준 이름
-      if (n >= 1 && n <= MAX_USERS && n !== myNum && d.name !== undefined) { names[n] = String(d.name).slice(0, 6); render(true); }
+      if (n >= 1 && n <= MAX_USERS && n !== myNum && d.name !== undefined) { names[n] = String(d.name).slice(0, 6); adoptRoom(n, d.room); render(true); }
       return;
     }
     if (d.t === "roger" && n >= 1 && n <= MAX_USERS && n !== myNum) {
@@ -3404,10 +3519,10 @@ var qrcode = function() {
     try {
       if (!peer || peer.destroyed) return;
       const entry = calls[idOf(num)];
-      const dc = peer.connect(idOf(num), { reliable: true, metadata: { name: myName, num: myNum } });
+      const dc = peer.connect(idOf(num), { reliable: true, metadata: { name: myName, num: myNum, room: roomName } });
       dc.on("error", () => {});
       dc.on("data", (d) => handleSignal(num, d));
-      dc.on("open", () => { try { dc.send({ t: "hello", name: myName, num: myNum }); } catch (e) {} });
+      dc.on("open", () => { try { dc.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {} });
       if (entry) {   // 이 연결을 유지해 두고 신호음을 보낼 때 씁니다
         entry.dc = dc;
         dc.on("close", () => { if (entry.dc === dc) entry.dc = null; });
@@ -3718,9 +3833,11 @@ var qrcode = function() {
       if (e.connected) { live.push(e.num); if (e.speaking) talkers.push(e.num); }
     }
     talkers.sort((a, b) => a - b); live.sort((a, b) => a - b);
-    if (whisperTo && !live.includes(whisperTo)) { whisperTo = 0; applyRouting(); }   // 귓속말 상대가 나가면 자동 해제
+    if (whisperTo && !live.includes(whisperTo)) { whisperTo = 0; applyRouting(); }
+    $("roomLabel").textContent = roomName ? roomName + " · " + code : "방 " + code;
+    $("meLabel").textContent = myNum + "번 · " + (live.length + 1) + "명";   // 귓속말 상대가 나가면 자동 해제
     const sig = [talkers.join(), live.join(), meSpeaking, micLive(), pttMode, listenMuted, standbyMode,
-                 vibrateOn, rogerOn, chanHeld, JSON.stringify(mutedNums), JSON.stringify(names), myName, JSON.stringify(whispersFrom), whisperTo].join("|");
+                 vibrateOn, rogerOn, chanHeld, JSON.stringify(mutedNums), JSON.stringify(names), myName, roomName, JSON.stringify(whispersFrom), whisperTo].join("|");
     if (!force && sig === lastSig) return;
     lastSig = sig;
 
@@ -3784,6 +3901,8 @@ var qrcode = function() {
     Object.values(calls).forEach(drop);
     calls = {}; lostAt = {}; names = {}; whisperTo = 0; whispersFrom = {};
     chanHeld = 0; chanPrev = 0; wasLive = false; rogerRx = {}; rogerBuf = null;
+    clearInterval(regTimer); regTimer = null; roomName = "";
+    if (regPeer) { try { regPeer.destroy(); } catch (e) {} regPeer = null; } regRooms = {};
     if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
     if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
     if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
@@ -3798,6 +3917,8 @@ var qrcode = function() {
     joinMsg(message || "", isErr);
     usedNums = {}; drawChips();
     if (/^\d{5}$/.test($("roomCode").value)) scheduleScan(1500);
+    $("roomName").value = ""; $("roomName").readOnly = false;
+    fetchRooms();
   }
 
   /* ================= 설치 / 초대 QR ================= */

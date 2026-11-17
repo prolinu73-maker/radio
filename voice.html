@@ -476,6 +476,9 @@
   <div class="opt-row"><span>화면 밝기</span>
     <div class="seg"><button id="themeLight">밝게</button><button id="themeDark">어둡게</button></div>
   </div>
+  <div class="opt-row nativeonly"><span>소리 나오는 곳</span>
+    <div class="seg"><button id="outSpk">스피커</button><button id="outEar">전화</button></div>
+  </div>
   <div class="opt-row"><span>말하는 방식</span>
     <div class="seg"><button id="modeOpen">켜고 끄기</button><button id="modePtt">누르고 말하기</button></div>
   </div>
@@ -2803,7 +2806,7 @@ var qrcode = function() {
 </script>
 <script>
   /* ================= 설정값 ================= */
-  const APP_VERSION = "2026.11.17-l";
+  const APP_VERSION = "2026.11.17-m";
   const IS_NATIVE = typeof window.AndroidKeeper !== "undefined";   // 갤럭시 전용 앱 안에서 열렸는지   // 파일을 고칠 때마다 이 값을 바꾸면, 접속한 사람들에게 자동으로 업데이트가 안내됩니다
   const APP_PREFIX = "edu-voice-";
   const MAX_USERS = 20;           // 한 방 최대 인원 (모두가 서로 직접 연결하는 Mesh 방식)
@@ -3144,6 +3147,7 @@ var qrcode = function() {
         $("joinScreen").classList.remove("on");
         $("callScreen").classList.add("on");
         $("roomLabel").textContent = roomName ? roomName + " · " + code : "방 " + code;
+        setTimeout(applyOutput, 800); setTimeout(applyOutput, 3000);
         regTimer = setInterval(reportRoom, 15000); setTimeout(reportRoom, 3000); setTimeout(reportRoom, 9000);
         $("meLabel").textContent = myNum + "번";
         window.scrollTo(0, 0);
@@ -3275,6 +3279,7 @@ var qrcode = function() {
       delete lostAt[num];
       if (call.peerConnection) limitBitrate(call.peerConnection);
       sendHello(num);
+      setTimeout(applyOutput, 600);
       setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {} } }, 2500);
       setTimeout(() => { if (!entry.dead && entry.dc && entry.dc.open) { try { entry.dc.send({ t: "hello", name: myName, num: myNum, room: roomName }); } catch (e) {} } }, 8000);
       applyRouting();
@@ -3500,6 +3505,7 @@ var qrcode = function() {
     $("vibSw").classList.toggle("on", vibrateOn);
     $("rogerSw").classList.toggle("on", rogerOn);
     $("wakeSw").classList.toggle("on", wakeOnRx);
+    $("outSpk").classList.toggle("sel", speakerOn); $("outEar").classList.toggle("sel", !speakerOn);
   }
   function openSettings() { syncSettings(); $("setModal").classList.toggle("incall", joined); $("setModal").classList.add("on"); }
   function closeSettings() { $("setModal").classList.remove("on"); }
@@ -3569,6 +3575,8 @@ var qrcode = function() {
   $("modePtt").onclick = () => { pttMode = true; pttHeld = false; savePref("ptt21", "1"); applyMic(); syncSettings(); render(true); };
   $("vibSw").onclick = () => { vibrateOn = !vibrateOn; savePref("vib", vibrateOn ? "1" : "0"); syncSettings(); render(true); };
   $("rogerSw").onclick = () => { rogerOn = !rogerOn; savePref("roger", rogerOn ? "1" : "0"); syncSettings(); render(true); if (rogerOn) playRoger(0.5); };
+  $("outSpk").onclick = () => setOutput(true);
+  $("outEar").onclick = () => setOutput(false);
   $("wakeSw").onclick = () => { wakeOnRx = !wakeOnRx; savePref("wakerx", wakeOnRx ? "1" : "0"); syncSettings(); };
 
 
@@ -3785,6 +3793,19 @@ var qrcode = function() {
 
   function nativeStart() { try { if (IS_NATIVE) AndroidKeeper.start("라방", "방 " + code + " · " + myNum + "번 통신 중"); } catch (e) {} }
   function nativeWake() { try { if (IS_NATIVE && wakeOnRx && AndroidKeeper.wake) AndroidKeeper.wake(); } catch (e) {} }
+  // 소리 나오는 곳: 스피커(크게) / 전화 모드(귀에 대는 수화기). 갤럭시 전용 앱에서만 바꿀 수 있습니다.
+  let speakerOn = loadPref("spk", "1") === "1";
+  function applyOutput() {
+    try { if (IS_NATIVE && AndroidKeeper.speaker && joined) return AndroidKeeper.speaker(speakerOn); } catch (e) {}
+    return false;
+  }
+  function setOutput(on) {
+    if (IS_NATIVE && !AndroidKeeper.speaker) { showToast("라방 앱을 새 버전으로 다시 설치해야 쓸 수 있습니다"); return; }
+    speakerOn = on; savePref("spk", on ? "1" : "0"); syncSettings();
+    if (!joined) { showToast((on ? "스피커" : "전화") + " 모드로 정했습니다 · 방에 들어가면 적용됩니다"); return; }
+    const ok = applyOutput();
+    showToast(ok ? (on ? "스피커 모드: 스피커로 크게 들립니다" : "전화 모드: 귀에 대고 들으세요") : "이 휴대폰에서는 바꾸지 못했습니다");
+  }
   function nativeStop() { try { if (IS_NATIVE) AndroidKeeper.stop(); } catch (e) {} }
 
   function bgStatus(t, ok) { const el = $("bgSt"); if (el) { el.textContent = t; el.classList.toggle("ok", !!ok); } }

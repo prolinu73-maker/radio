@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -53,7 +55,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " FieldRadioApp/1.1");
+        s.setUserAgentString(s.getUserAgentString() + " FieldRadioApp/1.2");
 
         web.addJavascriptInterface(new Bridge(), "AndroidKeeper");
 
@@ -204,6 +206,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void stop() {
+            resetAudioRoute();
             try {
                 stopService(new Intent(MainActivity.this, VoiceService.class));
             } catch (Exception e) {
@@ -213,7 +216,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String version() {
-            return "1.1";
+            return "1.2";
         }
 
         /** 앱 종료: 서비스를 멈추고 앱을 최근 목록에서도 완전히 닫습니다. */
@@ -226,6 +229,32 @@ public class MainActivity extends Activity {
                     finishAndRemoveTask();
                 }
             });
+        }
+
+        /** 소리 나오는 곳 선택: true = 스피커(크게), false = 전화 모드(귀에 대는 수화기). */
+        @JavascriptInterface
+        @SuppressWarnings("deprecation")
+        public boolean speaker(boolean on) {
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (am == null) {
+                    return false;
+                }
+                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                if (Build.VERSION.SDK_INT >= 31) {
+                    int want = on ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+                    for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
+                        if (d.getType() == want) {
+                            return am.setCommunicationDevice(d);
+                        }
+                    }
+                    return false;
+                }
+                am.setSpeakerphoneOn(on);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
 
         /** 누군가 말하면 꺼진 화면을 잠깐 켭니다. */
@@ -264,6 +293,25 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** 통신이 끝나면 소리 설정을 휴대폰 기본 상태로 되돌립니다. */
+    @SuppressWarnings("deprecation")
+    private void resetAudioRoute() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am == null) {
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= 31) {
+                am.clearCommunicationDevice();
+            } else {
+                am.setSpeakerphoneOn(false);
+            }
+            am.setMode(AudioManager.MODE_NORMAL);
+        } catch (Exception e) {
+            // 되돌리지 못해도 무시
+        }
+    }
+
     /** 알림창의 [종료] 버튼을 누르면 앱을 완전히 끝냅니다. */
     @Override
     protected void onNewIntent(Intent intent) {
@@ -283,6 +331,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        resetAudioRoute();
         stopService(new Intent(this, VoiceService.class));
         if (web != null) {
             web.destroy();
